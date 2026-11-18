@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.8
+Current version: 1.0.9
 
-Release tag: v-1.0.8
+Release tag: v-1.0.9
 
-Changelog label: v 1.0.8
+Changelog label: v 1.0.9
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.9
+
+### [v 1.0.9] 2026-11-18 - Bind production app profiles and reuse verified image content
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.9.
+- Normalize the reviewed Codexsun production binding for database-free native manifests, preserve explicit scope and reject mismatched service identities or other tenants. All eight current image service contracts pass Platform's production validator before rollout. Reuse an already loaded, exact approved image ID without repeating transfers; registry/archive content and caller label checks remain enforced. Typecheck/build and all fifty-five tests passed. No SQLite migration.
 
 ## v-1.0.8
 

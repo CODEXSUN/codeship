@@ -394,3 +394,7 @@ Operate local Docker deployments and regular updates across workspace apps, with
 ## 2026-11-18 - All-app release contract and operator adapters
 
 Standardized all nine business app contracts and published audited source tags through the helper. Added isolated database copying with shared read-only source snapshots, candidate migration plans, checked recovery archives for pending migrations, retained Ecommerce uploads, and Platform-coordinated application admission. The applications group retains loopback SDK/gateway transport in a shared namespace and publishes distinct loopback ports. Typecheck and fifty-one tests passed, including concurrent PostgreSQL snapshot verification. See all-app-release-audit.md for source checks, CI corrections and the current Ecommerce hold. Installation results remain separate stages.
+
+## 2026-11-18 - Final production profile preflight
+
+Validated all eight business manifests against Platform production admission before any application rollout. Database-free native manifests now receive the explicit reviewed Codexsun binding; mismatched app/tenant identities are rejected. Exact approved image IDs already loaded locally are reused without another transfer, with content and label checks retained. Typecheck/build and fifty-five tests passed. Prepared 1.0.9; the earlier installer tag remains unchanged. Ecommerce's source hold is resolved with forty-five passing tests and a successful tagged image build.

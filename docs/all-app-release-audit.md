@@ -21,12 +21,12 @@ pushed tag, successful image build and verified installation are distinct stages
   Zetro's disposable PostgreSQL suite passed nine. Platform's five original
   PostgreSQL suites passed and its extended gateway suite also verifies container
   admission, repeatability, version rejection and preserved user grants.
-- CodeShip passed 51 tests, including migration policies, immutable releases,
+- CodeShip passed 55 tests, including migration policies, immutable releases,
   literal environment values, target allocation and a real PostgreSQL exported
   snapshot that remains stable while another connection writes.
-- Shared UI 0.1.8 passed 60 UI and four tool tests. SDK 0.1.4 passed 11 boundary
+- Shared UI 0.1.9 passed 60 UI and four tool tests. SDK 0.1.4 passed 11 boundary
   tests. Consumer pins identify exact published commits; later unfinished shared
-  UI work remains separate until its owning checks pass.
+  UI work is published only after its owning checks pass.
 
 ## Failures and corrections
 
@@ -38,8 +38,13 @@ pushed tag, successful image build and verified installation are distinct stages
   Both histories were merged and published with the helper. Recovery stashes are
   retained; no force push or tag replacement occurred.
 - Ecommerce received ongoing checkout/payment/invoice changes during this audit.
-  Its prior passing check no longer certifies that changing source. Its release
-  remains held until the current schema fixtures and complete owning checks pass.
+  Its initial hold was resolved after the current schema fixtures were completed:
+  all 45 source tests passed without skips, and 1.0.7 was tagged with the published
+  UI/SDK dependencies. Actual payment-provider sandbox execution remains deferred.
+- UIUX 0.1.7's isolated build rejected a newly added gallery example's older UI
+  pin. UIUX 0.1.8 pins published UI 0.1.9 and passed tagged CI; the failed tag is
+  retained. Production service preflight also caught unpinned native database-free
+  manifests; CodeShip 1.0.9 now applies its explicit reviewed Codexsun profile.
 
 ## Deployment contract
 

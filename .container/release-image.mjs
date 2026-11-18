@@ -4,6 +4,11 @@ import {mkdir,writeFile,rename} from 'node:fs/promises';
 import path from 'node:path';
 import {githubApi} from './github.mjs';
 export async function resolveReleaseImage(manifest,docker,cache) {
+ // An approved content-addressed image already loaded from a checked release
+ // does not need another registry transfer. Callers still check release labels.
+ if(/^sha256:[a-f0-9]{64}$/.test(manifest.imageId??''))try{
+  if(docker(['image','inspect',manifest.imageId,'--format','{{.Id}}'])===manifest.imageId)return manifest.imageId;
+ }catch{} // Missing locally: use the checked registry/archive path below.
  try{docker(['pull',manifest.image]);const id=docker(['image','inspect',manifest.image,'--format','{{.Id}}']);if(id!==manifest.imageId)throw new Error('Registry image content differs from the release.');return manifest.image;}catch(error){
   // Private GHCR requires a separate packages token. Authenticated GitHub release assets
   // provide the same checked image without storing broad registry credentials on the host.

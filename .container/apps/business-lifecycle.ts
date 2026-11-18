@@ -5,7 +5,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
 import path from 'node:path';
 import pg from 'pg';
-import {businessTarget} from './business-targets.mjs';
+import {businessTarget,businessServiceProfile} from './business-targets.mjs';
 import {withSourceSnapshot} from './postgres-snapshot.ts';
 import {appRoot,workspaceRoot,openDatabase} from '../../src/api/database.ts';
 import {decryptSecrets} from '../../src/api/modules/master/application/vault.ts';
@@ -118,8 +118,8 @@ try{
    dbTool('migrate');await stage('migration','passed');
   }else await stage('migration','skipped',{reason:'No pending migrations; image/configuration update only'});
   const temporary=docker(['create',manifest.image]);const serviceFile=path.join(privateRoot,'service-manifest.json');try{docker(['cp',temporary+':/opt/codebiz/apps/'+name+'/contracts/platform-service.json',serviceFile]);}finally{docker(['rm',temporary]);}
-  const service=JSON.parse(await readFile(serviceFile,'utf8'));if(service.appKey!==name)throw Error('Image service manifest identity differs.');Object.assign(service,{environment:'production',internalOrigin:'http://127.0.0.1:'+target.apiPort,gatewayEnabled:true});
-  const profile={manifest:service,token:env[target.prefix+'_PLATFORM_SERVICE_TOKEN'],version:manifest.version,image:releaseImage};
+  const service=JSON.parse(await readFile(serviceFile,'utf8'));
+  const profile=businessServiceProfile(target,service,{token:env[target.prefix+'_PLATFORM_SERVICE_TOKEN'],version:manifest.version,image:releaseImage});
   const registered=JSON.parse(docker(['exec','-i','platform','node','scripts/container-release.ts','prepare'],JSON.stringify(profile)));
   env[target.prefix+'_PLATFORM_SERVICE_ID']=registered.serviceId;env[target.prefix+'_PLATFORM_TENANT_ID']=registered.tenantId;
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);
