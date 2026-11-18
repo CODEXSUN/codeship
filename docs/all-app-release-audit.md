@@ -72,3 +72,7 @@ grants. Local Docker verification does not certify public/VPS deployment.
 Actual tags, image identities, partial failures and installation outcomes are
 recorded in `.codeship/*/stages.jsonl` and the work record. This source audit alone
 does not claim that every container has been installed.
+
+## Completed local container stage
+
+CodeShip 1.0.11 passed all 60 source checks and tagged CI, then the explicit twelve-product approved set deployed successfully. All nine business containers are healthy with separate namespaces, addresses and own ports. Platform-only replacement preserved all eight app container identities and restored app-to-Platform connectivity. Existing SQLite/project identities were retained. The browser showed nine fresh healthy cards. All 24 existing three-account login/session/first-password/logout checks passed; no passwords or grants were changed. See the work record for exact versions, retained partial failures and limits, and platform-entry-audit.md for the broader single-entry gap.
