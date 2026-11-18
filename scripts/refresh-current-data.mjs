@@ -6,7 +6,7 @@ import pg from 'pg';
 const root=path.resolve(import.meta.dirname,'..'),workspace=path.resolve(root,'../..'),apply=process.argv.includes('--apply'),dockerOnly=process.argv.includes('--docker-only');
 if(process.argv.slice(2).some(arg=>!['--apply','--dry-run','--docker-only'].includes(arg)))throw new Error('Use --dry-run or --apply, optionally --docker-only.');
 if(process.argv.includes('--apply')&&process.argv.includes('--dry-run'))throw new Error('Choose either --dry-run or --apply.');
-const origin='http://127.0.0.1:4450';
+const origin='http://127.0.0.1:14350';
 const request=async route=>{const response=await fetch(origin+'/api/v1/'+route);if(!response.ok)throw new Error('Current Codeship inventory is unavailable.');return response.json();};
 const existing=await request('applications'),infra=await request('infrastructure');
 const readEnv=file=>existsSync(file)?parseEnv(readFileSync(file,'utf8')):{};

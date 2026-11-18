@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.12
+Current version: 1.0.13
 
-Release tag: v-1.0.12
+Release tag: v-1.0.13
 
-Changelog label: v 1.0.12
+Changelog label: v 1.0.13
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.13
+
+### [v 1.0.13] 2026-11-18 - Publish CodeShip on 14350 and preserve other app deployments
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.13.
+- Publish CodeShip only on loopback 14350:4350 using the internal-port prefix convention. Probe changed ports before effects, verify exact bindings, update monitoring callers, and preserve unselected service definitions/volumes/networks. Include the independently verified SQLite writer-lock correction. No database schema change.
 
 ## v-1.0.12
 

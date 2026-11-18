@@ -41,3 +41,7 @@ Only pending schema migrations trigger database backups/migrations. The grouping
 Private artifacts are under `.codeship/devkits/`: `state.json`, generated `compose.json`, `stages.jsonl`, frozen `builds/`, native migration backups and `private/` database snapshots/rendered environments. Docker migration backups also remain in the CodeShip data volume under `/data/backups`. Keep the vault key separately with portable SQLite recovery. Preserve previous images and these files on failure; no automatic destructive rollback or pruning is performed.
 
 The host metrics collector starts from CodeShip's native API and these deployment commands. Service/owner matching keeps the three Devkits in their own metric category. Native registrations remain in Registry but are omitted from the operational card list when the same owner has deployed Docker metrics.
+
+## Current CodeShip-only update
+
+CodeShip publishes on http://127.0.0.1:14350 with the mapping 127.0.0.1:14350:4350 (prefix 1 to internal port 4350). The older table above is historical. This update changes CodeShip only: other owners' images, ports, commands, runtime settings and physical volumes are retained exactly. Each app chat owns its own next deployment. Use the per-service codeship/update.sh and codeship/verify.sh entries with an explicit approved release set; do not invoke the all-services update for this task.

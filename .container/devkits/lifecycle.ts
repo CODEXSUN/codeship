@@ -6,6 +6,8 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import pg from 'pg';
+import {codeshipHostPort,codeshipOrigin} from '../local-port.mjs';
+import {preserveUnselected} from './selection.mjs';
 import {appRoot,workspaceRoot,openDatabase} from '../../src/api/database.ts';
 import {decryptSecrets} from '../../src/api/modules/master/application/vault.ts';
 import {currentEnvironment} from '../../src/api/modules/master/application/environment.ts';
@@ -39,7 +41,7 @@ const compose=(args:string[])=>execute('docker',['compose','--project-name','dev
 const jsonFile=async(file:string)=>JSON.parse(await readFile(file,'utf8'));
 async function save(file:string,value:unknown){await writeFile(file+'.next',JSON.stringify(value,null,2)+'\n',{mode:0o600});await rename(file+'.next',file);}
 let prior:any=existsSync(stateFile)?await jsonFile(stateFile):undefined;
-const ports={codeship:4450,codeitz:4451,uiux:4452},internal={codeship:4350,codeitz:4305,uiux:4315};
+const ports={codeship:codeshipHostPort,codeitz:4451,uiux:4452},internal={codeship:4350,codeitz:4305,uiux:4315};
 const images:Record<string,any>={...(prior?.services??{})};
 const histories:Record<string,any>={};
 let buildContext=workspaceRoot;
@@ -49,12 +51,13 @@ async function verify(){
  await ensureMetricsCollector();
  for(const name of selected){for(const suffix of ['/api/live','/api/ready','/']){const response=await fetch('http://127.0.0.1:'+ports[name]+suffix,{signal:AbortSignal.timeout(10000)});if(response.status!==200)throw new Error(name+' readiness failed.');await response.body?.cancel();}
   const forbidden=await fetch('http://127.0.0.1:'+ports[name]+'/api/ready',{headers:{Origin:'https://example.invalid'},signal:AbortSignal.timeout(5000)});if(forbidden.status!==403)throw new Error(name+' origin guard failed.');
-  const facts=JSON.parse(docker(['inspect','--format','{"name":{{json .Name}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"health":{{json .State.Health.Status}},"mounts":{{json .Mounts}}}',name]));
+  const facts=JSON.parse(docker(['inspect','--format','{"name":{{json .Name}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"health":{{json .State.Health.Status}},"mounts":{{json .Mounts}},"ports":{{json .HostConfig.PortBindings}}}',name]));
   if(facts.name!=='/'+name||facts.project!=='devkits'||facts.service!==name||facts.health!=='healthy')throw new Error('Devkit group identity verification failed.');
   if(images[name]?.imageId&&facts.image!==images[name].imageId)throw new Error('Running '+name+' image differs from the approved release.');
   if(name==='codeship'&&!['codeship_data','codeship_keys'].every(volume=>facts.mounts.some((m:any)=>m.Name===volume)))throw new Error('CodeShip data/key volumes changed.');
+  if(name==='codeship'&&(Object.keys(facts.ports??{}).length!==1||facts.ports['4350/tcp']?.length!==1||facts.ports['4350/tcp'][0].HostIp!=='127.0.0.1'||facts.ports['4350/tcp'][0].HostPort!==String(codeshipHostPort)))throw Error('CodeShip must publish only its own loopback 14350:4350 port.');
  }
- for(let attempt=0;attempt<30;attempt++){const report=await(await fetch('http://127.0.0.1:4450/api/v1/docker-metrics/devkits')).json();if(report.available&&!report.stale&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name)))return;await new Promise(resolve=>setTimeout(resolve,1000));}
+ for(let attempt=0;attempt<30;attempt++){const report=await(await fetch(codeshipOrigin+'/api/v1/docker-metrics/devkits')).json();if(report.available&&!report.stale&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name)))return;await new Promise(resolve=>setTimeout(resolve,1000));}
  throw new Error('Fresh grouped Devkit metrics not available.');
 }
 try{
@@ -68,7 +71,9 @@ try{
   for(const name of selected){
    const existing=docker(['ps','-aq','--filter','name=^/'+name+'$']);if(existing&&docker(['inspect','--format','{{index .Config.Labels "com.docker.compose.project"}}',existing])!=='devkits')throw new Error('Container name already belongs to another deployment.');
    if(mode==='setup'&&prior?.services[name])throw new Error(name+' is installed; use its update.sh.');
-   if(!existing&&!(name==='codeship'&&!prior))await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',()=>reject(new Error('Port '+ports[name]+' is already occupied.')));probe.listen(ports[name],'127.0.0.1',()=>probe.close(()=>resolve()));});
+   const published=existing?JSON.parse(docker(['inspect',existing,'--format','{{json .HostConfig.PortBindings}}'])):{};
+   const ownsPort=published[internal[name]+'/tcp']?.some((binding:any)=>binding.HostIp==='127.0.0.1'&&binding.HostPort===String(ports[name]));
+   if(!ownsPort)await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',()=>reject(new Error('Port '+ports[name]+' is already occupied.')));probe.listen(ports[name],'127.0.0.1',()=>probe.close(()=>resolve()));});
   }
   await stage('preflight','passed');
   const releaseSet=releaseSetFile?await jsonFile(releaseSetFile):undefined;
@@ -184,6 +189,10 @@ try{
   if(images.codeitz)services.codeitz={...service('codeitz'),env_file:[{path:codeitzComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',CODEITZ_HOST:'0.0.0.0',CODEITZ_PORT:'4305',CODEITZ_BIND_MODE:'docker-direct',CODEITZ_DOCKER_PEERS:[peers,infraPeers].filter(Boolean).join(','),CODEITZ_WORKSPACE_ROOT:'/workspace'},command:['node','/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts'],volumes:['workspace:/workspace','codeitz_state:/opt/codebiz/devkit/codeitz/.codeitz','codeitz_codex:/home/node/.codex',bind(path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-start.ts'),'/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts')],networks:['default','infra']};
   if(images.uiux)services.uiux={...service('uiux'),env_file:[{path:uiuxComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',UIUX_HOST:'0.0.0.0',UIUX_PORT:'4315',UIUX_BIND_MODE:'docker-direct',UIUX_DOCKER_PEERS:peers},command:['node','src/api/server.ts']};
   const definition={name:'devkits',services,volumes:{codeship_data:{external:true,name:'codeship_data'},codeship_keys:{external:true,name:'codeship_keys'},workspace:{external:true,name:'codeitz-docker-local_workspace'},codeitz_state:{},codeitz_codex:{}},networks:{default:{external:true,name:'devkits_default'},infra:{external:true,name:'codebiz-infra_default'}}};
+  if(prior&&existsSync(composeFile)){
+   const existing=await jsonFile(composeFile);
+   preserveUnselected(definition,existing,selected);
+  }
   await save(composeFile,definition);docker(['compose','-p','devkits','-f',composeFile,'config','--quiet']);
   await stage('replacement','started');
   if(!prior){const old=docker(['ps','-aq','--filter','label=com.docker.compose.project=codeship','--filter','label=com.docker.compose.service=app']);if(!old)throw new Error('Former CodeShip container missing.');const facts=JSON.parse(docker(['inspect','--format','{"image":{{json .Config.Image}},"mounts":{{json .Mounts}}}',old]));if(facts.image!==legacyState.image||!['codeship_data','codeship_keys'].every(name=>facts.mounts.some((m:any)=>m.Name===name)))throw new Error('Former CodeShip identity/volume mismatch.');docker(['stop',old]);}

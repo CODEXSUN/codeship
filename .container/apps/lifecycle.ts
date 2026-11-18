@@ -39,7 +39,7 @@ async function verify(image?:string){
  verifyIndependentContainer(name,facts);
  if(facts.project!=='applications'||facts.health!=='healthy'||!Object.values(facts.ports).every((bindings:any)=>bindings.every((binding:any)=>binding.HostIp==='127.0.0.1'))||(image&&facts.image!==docker(['image','inspect',image,'--format','{{.Id}}'])))throw new Error('Platform release identity or binding mismatch.');
  await ensureMetricsCollector();
- for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:4450/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service==='platform'&&row.owner==='apps/platform'))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw new Error('Fresh Platform metrics unavailable.');
+ for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:14350/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service==='platform'&&row.owner==='apps/platform'))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw new Error('Fresh Platform metrics unavailable.');
 }
 try {
  if(mode==='verify'){await verify(prior?.image);await stage('verification','passed');}
