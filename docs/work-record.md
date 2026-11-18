@@ -402,3 +402,7 @@ Validated all eight business manifests against Platform production admission bef
 ## 2026-11-18 - Credential-isolated application admission recovery
 
 Devkits 1.0.9/1.0.6/0.1.8 and Platform 1.0.5 deployed successfully. Both Platform data scopes passed snapshot/count/identity verification with no pending migration. Core App's data copy also passed; admission stopped before container replacement on Platform's unique credential constraint because the native token had been retained. The installer now generates a separate production token, preserves independent saved credentials, and saves encrypted recovery settings before admission. Core App's verified import is retained for a safe retry. Typecheck/build and fifty-six tests passed; no SQLite migration.
+
+## 2026-11-18 - Independent application containers
+
+Prepared 1.0.11 after the user requested separate containers. Replaced Platform namespace sharing with distinct container endpoints and published ports on the managed private bridge. Existing images, databases and import markers are retained. The operator preflights Platform and prerequisites before installation; replacement verifies each container owns only its own port. Infrastructure PostgreSQL reconnects to the bridge after managed replacement. Typecheck/build and all 60 tests passed. Publication and local rollout remain separately verified stages; this source audit does not claim deployment completion.

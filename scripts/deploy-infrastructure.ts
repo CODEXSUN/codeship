@@ -6,6 +6,7 @@ import path from 'node:path';
 import pg from 'pg';
 import {openDatabase,appRoot} from '../src/api/database.ts';
 import {decryptSecrets} from '../src/api/modules/master/application/vault.ts';
+import {applicationNetwork,ensureApplicationNetwork} from '../.container/apps/network-topology.mjs';
 
 const manifestPath=path.resolve(process.argv[2]??'');
 const generatedRoot=path.join(appRoot,'.codeship/infrastructure-generated')+path.sep;
@@ -48,6 +49,7 @@ try{
   await stage(row.public_id,'build','started');docker([...args,'build','--pull']);await stage(row.public_id,'build','passed');
   if((await db.selectFrom('infrastructure_services').select('revision').where('public_id','=',row.public_id).executeTakeFirstOrThrow()).revision!==row.revision)throw new Error('Settings changed during build.');
   await stage(row.public_id,'install','started');docker([...args,'up','-d','--wait','--wait-timeout','180']);await stage(row.public_id,'install','passed');
+  if(row.kind==='postgres'&&docker(['network','ls','--filter','name=^'+applicationNetwork+'$','--format','{{.Name}}'])){ensureApplicationNetwork(docker,row.project);await stage(row.public_id,'application-network','passed');}
   await stage(row.public_id,'verify','started');const secrets=row.encrypted_secrets?decryptSecrets(row.public_id,row.encrypted_secrets):{};
   const container=docker([...args,'ps','-q',serviceName]);
   if(row.kind==='postgres'){

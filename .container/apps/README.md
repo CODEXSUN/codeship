@@ -20,13 +20,19 @@ operator lock and writes its own stage log under `.codeship/apps/<name>/`.
 | Zetro | 127.0.0.1:4460 | app_zetro |
 | Texlinks | 127.0.0.1:4461 | none |
 
-Applications use separate images/filesystems and share Platform's Docker network
-namespace. Internal SDK/gateway requests retain the existing loopback-only trust
-rules. A supervised byte relay publishes each app through Platform's namespace;
-it preserves Host/Origin and makes no authentication decisions. All host ports
-bind to loopback. Updating Platform must reconcile the whole Compose group so
-namespace-dependent containers reconnect, retaining their approved image IDs.
-This local trusted group is not the separately required VPS/private execution adapter.
+Each application owns its container, filesystem, process/network namespace and
+published loopback port. No app uses `network_mode: service:platform` or stores its
+port binding on Platform. The external `applications_backend` bridge supplies
+separate reserved addresses and Docker DNS names. PostgreSQL attaches as shared
+infrastructure with separate app databases and roles; its update entry restores
+that attachment after container replacement.
+
+Private connection bridges inside each container preserve the SDK/gateway's
+loopback addresses and exact Host/Origin/grant/body bytes while connecting to
+other containers by Docker DNS. They make no authentication decision. Platform
+can be replaced independently without recreating app containers. Existing app
+images, data and credentials remain unchanged when only topology changes. This
+local transport is not the separately required VPS/private execution adapter.
 
 First installation copies the explicitly registered native database to an isolated
 database owned by a separate non-superuser, non-BYPASSRLS role. Recovery settings

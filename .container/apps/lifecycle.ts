@@ -1,5 +1,5 @@
 import {spawnSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,open,unlink,rename} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {createHash,randomBytes} from 'node:crypto';
 import {parseEnv} from 'node:util';
@@ -17,6 +17,7 @@ import {platformRegistration} from './platform-registration.ts';
 import {platformDatabaseScopes,platformDatabaseRole} from './platform-databases.mjs';
 import {businessTargets} from './business-targets.mjs';
 import {withSourceSnapshot} from './postgres-snapshot.ts';
+import {ensureApplicationNetwork,applyIndependentNetwork,verifyIndependentContainer} from './network-topology.mjs';
 import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 const [mode,name,...args]=process.argv.slice(2);
@@ -34,7 +35,8 @@ async function save(file:string,value:unknown){await writeFile(file+'.next',JSON
 async function verify(image?:string){
  for(const url of ['/api/live','/api/ready','/','/api/v1/platform/config']){const response=await fetch('http://127.0.0.1:4453'+url,{signal:AbortSignal.timeout(10000)});if(response.status!==200)throw new Error('Platform readiness failed.');await response.body?.cancel();}
  const foreign=await fetch('http://127.0.0.1:4453/api/ready',{headers:{origin:'https://example.invalid'}});if(foreign.status!==403)throw new Error('Platform Docker origin guard failed.');
- const facts=JSON.parse(docker(['inspect','--format','{"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"image":{{json .Image}},"ports":{{json .HostConfig.PortBindings}}}',name]));
+ const facts=JSON.parse(docker(['inspect','--format','{"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"image":{{json .Image}},"ports":{{json .HostConfig.PortBindings}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":{{json .NetworkSettings.Networks}}}',name]));
+ verifyIndependentContainer(name,facts);
  if(facts.project!=='applications'||facts.health!=='healthy'||!Object.values(facts.ports).every((bindings:any)=>bindings.every((binding:any)=>binding.HostIp==='127.0.0.1'))||(image&&facts.image!==docker(['image','inspect',image,'--format','{{.Id}}'])))throw new Error('Platform release identity or binding mismatch.');
  await ensureMetricsCollector();
  for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:4450/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service==='platform'&&row.owner==='apps/platform'))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw new Error('Fresh Platform metrics unavailable.');
@@ -43,6 +45,7 @@ try {
  if(mode==='verify'){await verify(prior?.image);await stage('verification','passed');}
  else {
   if(mode==='setup'&&prior)throw new Error('Platform is installed; use update.sh.');if(mode==='update'&&!prior)throw new Error('Install Platform first.');
+  if(prior){const recovery=path.join(privateRoot,'recovery',run);await mkdir(recovery,{recursive:true,mode:0o700});for(const file of [composeFile,envFile,path.join(privateRoot,'compose.env'),stateFile])if(existsSync(file))await copyFile(file,path.join(recovery,path.basename(file)));await stage('previous-configuration','retained',{directory:recovery});}
   requireRawCompose(docker(['compose','version','--short']));
   if(!prior)for(const target of Object.values(businessTargets))await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(target.port,'127.0.0.1',()=>probe.close(()=>resolve()));});
   if(!prior){if(docker(['ps','-aq','--filter','name=^/platform$']))throw new Error('Platform name is occupied.');await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(4453,'127.0.0.1',()=>probe.close(()=>resolve()));});}
@@ -118,19 +121,24 @@ try {
    const marker=JSON.parse(await readFile(markerFile,'utf8'));for(const scope of marker.scopes){const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);const dump=path.join(privateRoot,scope.database+'-before-'+run+'.dump');execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',dump],undefined,connectionEnv(target.href));execute(path.join(bin,'pg_restore'),['--list',dump]);await stage('backup-'+scope.database,'passed',{dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});}
    dbTool('migrate');await stage('migration','passed');
   }else await stage('migration','skipped',{reason:'No pending master or tenant migrations; image-only update'});
-  const network=JSON.parse(docker(['network','inspect','codebiz-infra_default']))[0],peers=network.IPAM.Config.map((row:any)=>row.Gateway).filter(Boolean).join(',');
+  const topology=ensureApplicationNetwork(docker),peers=topology.peers;
+  await stage('private-network','passed',{network:topology.name,subnet:topology.subnet});
   const composeEnvFile=path.join(privateRoot,'compose.env');await writeFile(composeEnvFile,rawEnvironment(env),{mode:0o600});
   const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'1',PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
-  definition.services.platform.ports.push(...Object.values(businessTargets).map(target=>'127.0.0.1:'+target.port+':'+target.relayPort));
+  const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','runtime-network.mjs','start-platform.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
+  Object.assign(definition.services.platform,{command:['node','/run/codeship/start-platform.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true}]});
+  Object.assign(definition.services.platform.environment,{CODESHIP_CONTAINER_MODE:'1'});
+  applyIndependentNetwork(definition.services.platform,'platform',topology);
+  Object.assign(definition,{networks:{backend:{external:true,name:topology.name}}});
   Object.assign(definition.services.platform.environment,{PLATFORM_GATEWAY_ENABLED:'1',PLATFORM_GATEWAY_ALLOWED_ORIGINS:JSON.stringify(Object.values(businessTargets).map(target=>'http://127.0.0.1:'+target.apiPort)),PLATFORM_GATEWAY_IMAGE_UPLOADS:JSON.stringify([{appKey:'ecommerce',path:'/api/v1/desk/product-images'}])});
-  if(existsSync(composeFile)){const existing=JSON.parse(await readFile(composeFile,'utf8'));for(const name of Object.keys(businessTargets))if(existing.services?.[name])(definition.services as Record<string,unknown>)[name]=existing.services[name];if(existing.volumes)Object.assign(definition,{volumes:existing.volumes});}
+  if(existsSync(composeFile)){const existing=JSON.parse(await readFile(composeFile,'utf8'));for(const name of Object.keys(businessTargets))if(existing.services?.[name]){if(existing.services[name].network_mode)throw Error('Migrate existing shared-network application containers explicitly before replacing Platform.');(definition.services as Record<string,unknown>)[name]=existing.services[name];}if(existing.volumes)Object.assign(definition,{volumes:existing.volumes});}
   await save(composeFile,definition);docker(['compose','-p','applications','-f',composeFile,'config','--quiet']);
   const payload=JSON.stringify([platformRegistration(env,manifest.version)]);
   execute(process.execPath,['scripts/register-devkits.ts'],payload);
   const state=JSON.parse(await readFile(path.join(appRoot,'.codeship/devkits/state.json'),'utf8'));
   docker(['run','--rm','-i','--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','--mount','type=volume,source=codeship_data,target=/data','--mount','type=volume,source=codeship_keys,target=/keys',state.services.codeship.image,'node','scripts/register-devkits.ts'],payload);
   await stage('replacement','started');docker(['compose','-p','applications','-f',composeFile,'up','-d','--no-build','--wait','--wait-timeout','180']);
-  await verify(manifest.image);await stage('verification','passed');await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile});await stage('release','succeeded');
+  await verify(manifest.image);await stage('verification','passed');await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile,network:{name:topology.name,address:topology.addresses.platform,subnet:topology.subnet}});await stage('release','succeeded');
  }
 }catch(error){await stage('release','failed',{message:(error as Error).message});console.error('Platform operation failed; existing data, images and recovery files are retained.');process.exitCode=1;}
 finally{await lock.close();await unlink(lockFile);}

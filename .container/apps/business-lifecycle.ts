@@ -7,6 +7,7 @@ import path from 'node:path';
 import pg from 'pg';
 import {businessTarget,businessServiceProfile,productionServiceToken} from './business-targets.mjs';
 import {withSourceSnapshot} from './postgres-snapshot.ts';
+import {ensureApplicationNetwork,applyIndependentNetwork,verifyIndependentContainer} from './network-topology.mjs';
 import {appRoot,workspaceRoot,openDatabase} from '../../src/api/database.ts';
 import {decryptSecrets} from '../../src/api/modules/master/application/vault.ts';
 import {serializeDeploymentEnvironment,installationUsers} from '../../src/api/modules/master/application/accounts.ts';
@@ -36,11 +37,13 @@ const quote=(name:string)=>'"'+name.replaceAll('"','""')+'"';
 const connectionEnv=(value:string)=>{const url=new URL(value);return {...process.env,PGHOST:url.hostname,PGPORT:url.port||'5432',PGDATABASE:url.pathname.slice(1),PGUSER:decodeURIComponent(url.username),PGPASSWORD:decodeURIComponent(url.password),PGSSLMODE:url.searchParams.get('sslmode')??'disable'};};
 const bin=process.platform==='win32'?'C:/Program Files/PostgreSQL/17/bin/':'';
 const parsePrivate=(value:string)=>Object.fromEntries(Object.entries(parseEnv(value)).map(([key,value])=>{if(value===undefined)throw Error('Invalid private environment.');return [key,value];}));
+async function requireReady(port:number,label:string){const response=await fetch('http://127.0.0.1:'+port+'/api/ready',{signal:AbortSignal.timeout(10000)});await response.body?.cancel();if(!response.ok)throw Error(label+' must be healthy before this operation.');}
 async function verify(image:string){
  for(const route of ['/','/api/ready','/api/service-info']){const response=await fetch('http://127.0.0.1:'+target.port+route,{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Application readiness failed.');await response.body?.cancel();}
  const guard=await fetch('http://127.0.0.1:'+target.port+'/api/v1/workspace',{signal:AbortSignal.timeout(10000)});await guard.body?.cancel();if(guard.status!==401)throw Error('Application must require a Platform grant.');
  const foreign=await fetch('http://127.0.0.1:'+target.port+'/platform-api/v1/identity/session',{headers:{origin:'https://example.invalid'},signal:AbortSignal.timeout(10000)});await foreign.body?.cancel();if(foreign.status!==403)throw Error('Application browser origin guard failed.');
- const facts=JSON.parse(docker(['inspect',name,'--format','{"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}}}']));
+ const facts=JSON.parse(docker(['inspect',name,'--format','{"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":{{json .NetworkSettings.Networks}},"ports":{{json .HostConfig.PortBindings}}}']));
+ verifyIndependentContainer(name,facts);
  if(facts.project!=='applications'||facts.health!=='healthy'||facts.image!==docker(['image','inspect',image,'--format','{{.Id}}']))throw Error('Application image or health identity mismatch.');
  await ensureMetricsCollector();for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:4450/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service===name))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
 }
@@ -56,10 +59,13 @@ try{
  if(mode==='verify'){if(!prior)throw Error('Application is not installed.');await verify(prior.image);await stage('verification','passed');}
  else{
   if(mode==='setup'&&prior)throw Error('Application is installed; use update.');if(mode==='update'&&!prior)throw Error('Install the application first.');
+  const platformDefinition=JSON.parse(await readFile(composeFile,'utf8'));
+  if(platformDefinition.services?.platform?.network_mode||!platformDefinition.services?.platform?.networks?.backend)throw Error('Update Platform to the independent-container network before installing applications.');
+  await requireReady(4453,'Platform');
   if(prior){const recovery=path.join(privateRoot,'recovery',run);await mkdir(recovery,{recursive:true,mode:0o700});for(const file of [composeFile,envFile,path.join(privateRoot,'compose.env'),stateFile])if(existsSync(file))await copyFile(file,path.join(recovery,path.basename(file)));await stage('previous-configuration','retained',{directory:recovery});}
   requireRawCompose(docker(['compose','version','--short']));
   if(!prior&&docker(['ps','-aq','--filter','name=^/'+name+'$']))throw Error('Application container name is occupied.');
-  for(const dependency of target.dependencies)if(!existsSync(path.join(appRoot,'.codeship/apps',dependency,'state.json')))throw Error('Install the verified prerequisite '+dependency+' first.');
+  for(const dependency of target.dependencies){if(!existsSync(path.join(appRoot,'.codeship/apps',dependency,'state.json')))throw Error('Install the verified prerequisite '+dependency+' first.');await requireReady(businessTarget(dependency).port,dependency);}
   const set=JSON.parse(await readFile(path.resolve(args[1]),'utf8')),manifest=set.services?.[name];
   if(set.schema!==1||set.source!=='github'||!manifest)throw Error('Approved application release missing.');
   validateManifest(manifest,{owner:'apps/'+name,repository:'CODEXSUN/'+name,tag:manifest.tag,commit:manifest.commit});
@@ -111,7 +117,7 @@ try{
     await save(markerFile,{status:'imported',database:target.database,role:target.database,dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});await stage('database-copy','passed');
    }finally{await admin.end();}
   }
-  const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','business-database.mjs','start-business.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
+  const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','business-database.mjs','runtime-network.mjs','start-business.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
   await registry(env,manifest.version);
   const dbTool=(command:string)=>docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/app.env,readonly','--mount','type=bind,source='+runtime+',target=/run/codeship,readonly','--entrypoint','node',manifest.image,'--env-file=/run/app.env','/run/codeship/business-database.mjs',command]);
@@ -129,7 +135,9 @@ try{
   env[target.prefix+'_PLATFORM_SERVICE_ID']=registered.serviceId;env[target.prefix+'_PLATFORM_TENANT_ID']=registered.tenantId;
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);
   const composeEnv=path.join(privateRoot,'compose.env');await writeFile(composeEnv,rawEnvironment(env),{mode:0o600});
-  const definition=JSON.parse(await readFile(composeFile,'utf8'));
+  const definition=JSON.parse(await readFile(composeFile,'utf8')),topology=ensureApplicationNetwork(docker);
+  if(definition.services.platform.network_mode||!definition.services.platform.networks?.backend)throw Error('Update Platform to the independent-container network before installing applications.');
+  definition.networks={backend:{external:true,name:topology.name}};
   const dataVolumes:any[]=[];
   if(name==='ecommerce'){
    const volume='ecommerce_data',marker=path.join(root,'files-import.json');
@@ -142,10 +150,12 @@ try{
    }
    definition.volumes??={};definition.volumes[volume]={external:true,name:volume};dataVolumes.push({type:'volume',source:volume,target:'/opt/codebiz/apps/ecommerce/data'});
   }
-  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',network_mode:'service:platform',depends_on:{platform:{condition:'service_healthy',restart:true}},security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'};
+  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'};
+  applyIndependentNetwork(definition.services[name],name,topology);
+  await stage('private-network','passed',{network:topology.name,address:topology.addresses[name]});
   await save(composeFile,definition);compose(['config','--quiet']);await stage('replacement','started');compose(['up','-d','--no-build','--wait','--wait-timeout','180',name]);
   await verify(manifest.image);docker(['exec','-i','platform','node','scripts/container-release.ts','complete'],JSON.stringify(profile));await stage('platform-admission','passed');await registry(env,manifest.version,true);
-  await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile});await stage('release','succeeded');
+  await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile,network:{name:topology.name,address:topology.addresses[name],subnet:topology.subnet}});await stage('release','succeeded');
  }
 }catch(error){await stage('release','failed',{message:(error as Error).message});console.error('Application operation failed; prior images, independent data and recovery files are retained.');process.exitCode=1;}
 finally{await lock.close();await unlink(lockFile);}

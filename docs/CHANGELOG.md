@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.10
+Current version: 1.0.11
 
-Release tag: v-1.0.10
+Release tag: v-1.0.11
 
-Changelog label: v 1.0.10
+Changelog label: v 1.0.11
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.11
+
+### [v 1.0.11] 2026-11-18 - Give every application an independent container network and port
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.11.
+- Each application owns its container network namespace, private bridge address and loopback port. Private TCP bridges retain existing authentication and origin checks. Platform no longer publishes other app ports or controls their container lifetime. PostgreSQL is reattached to the application bridge without replacing its container. Typecheck/build and all 60 tests passed, including independent endpoints and byte-preserving transport. No database schema change.
 
 ## v-1.0.10
 
