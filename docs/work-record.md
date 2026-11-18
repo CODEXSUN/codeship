@@ -426,3 +426,7 @@ User selected app subdomains rather than shared-host paths. Continue local Docke
 ## 2026-11-18 - Local Platform entry adapter
 
 Prepared 1.0.12 with the candidate-owned explicit local-host registration stage. Bindings remain encrypted in the Platform registry environment and are passed through raw private runtime configuration. The adapter refuses tenant-domain conflicts or disabled shared hosts and does not verify customer domains automatically. Included the existing reviewed optional password-change policy default. Typecheck/build and all 60 CodeShip tests passed; no schema migration. Runtime outcomes follow after successful tagged images.
+
+## 2026-11-18 - Concurrent registry writer correction
+
+Two approved 1.0.12 update attempts stopped before replacement because the temporary encrypted-registry writer hit SQLite database-is-locked while the running operator renewed its lease. Existing data/key volumes and 1.0.11 container were retained. Product transactions now reserve the SQLite writer before reading revisions, avoiding invalidation of a deferred WAL read snapshot by a second process. The regression test uses a separate worker/SQLite connection and proves both updates persist. Typecheck/build and all 61 tests passed. Codeitz chat subsequently took ownership of the active Docker recovery; this work performs no concurrent Devkits operation while that handoff is active. Unrelated Registry/Texlinks edits are preserved outside this commit.

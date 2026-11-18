@@ -18,7 +18,9 @@ export function openDatabase(file=databaseFile()){
  sqlite.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
  const bind=(values:readonly unknown[])=>values.map(v=>v instanceof Date?v.toISOString():typeof v==='boolean'?Number(v):v) as any[];
  const normalize=(rows:Record<string,unknown>[])=>rows.map(row=>{for(const key of ['healthy','active'])if(key in row)row[key]=Boolean(row[key]);return row;});
- const adapter={close:()=>sqlite.close(),prepare(sql:string){const statement=sqlite.prepare(sql);return {
+ // Product transactions mutate registry/operation state. Reserve the writer before
+ // reading a revision so a concurrent operator lease cannot invalidate a WAL snapshot.
+ const adapter={close:()=>sqlite.close(),prepare(sql:string){const statement=sqlite.prepare(sql.trim().toLowerCase()==='begin'?'BEGIN IMMEDIATE':sql);return {
   reader:statement.columns().length>0,
   all:(values:readonly unknown[])=>normalize(statement.all(...bind(values))),
   run:(values:readonly unknown[])=>statement.run(...bind(values)),
