@@ -1,14 +1,21 @@
 import {spawn} from 'node:child_process';
-import {createServer,connect} from 'node:net';
+import {createServer,connect,isIP} from 'node:net';
 import {existsSync} from 'node:fs';
 import {businessTargets,businessTarget} from './business-targets.mjs';
 
-export function bridgePlan(name){
+export function bridgePlan(name,containerAddress){
  if(name!=='platform')businessTarget(name);
  const outgoing=Object.values(businessTargets).filter(target=>target.name!==name).map(target=>({host:'127.0.0.1',port:target.apiPort,targetHost:target.name,targetPort:target.relayPort}));
  if(name!=='platform')outgoing.push({host:'127.0.0.1',port:4385,targetHost:'platform',targetPort:4385});
  const target=name==='platform'?null:businessTarget(name);
  if(target)outgoing.push({host:'0.0.0.0',port:target.relayPort,targetHost:'127.0.0.1',targetPort:target.apiPort});
+ // Keep the established private relay for existing Platform/app containers.
+ // Billing's requested public container port binds only its reserved bridge IP,
+ // alongside the authenticated API on loopback at the same numeric port.
+ if(target&&target.publishedContainerPort!==target.relayPort){
+  if(isIP(containerAddress??'')!==4||containerAddress==='0.0.0.0'||containerAddress.startsWith('127.'))throw Error('Billing ingress requires its reserved private container address.');
+  outgoing.push({host:containerAddress,port:target.publishedContainerPort,targetHost:'127.0.0.1',targetPort:target.apiPort});
+ }
  return outgoing;
 }
 export function startContainerService(name){
@@ -16,8 +23,8 @@ export function startContainerService(name){
  const target=name==='platform'?null:businessTarget(name);
  const child=spawn(process.execPath,[name==='automation'?'scripts/runtime.ts':'src/api/server.ts'],{stdio:'inherit',env:{...process.env,...(target?{[target.prefix+'_HOST']:'127.0.0.1',[target.prefix+'_PORT']:String(target.apiPort)}:{})}});
  const sockets=new Set(),servers=[];let stopping=false;
- function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),35000);deadline.unref();}
- for(const route of bridgePlan(name)){
+  function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),35000);deadline.unref();}
+ for(const route of bridgePlan(name,process.env.CODESHIP_CONTAINER_ADDRESS)){
   const server=createConnectionBridge(route,sockets);servers.push(server);server.on('error',()=>{console.error('Application connection bridge could not start.');process.exitCode=1;stop();});server.listen(route.port,route.host);
  }
  child.on('error',()=>{console.error('Application process could not start.');process.exitCode=1;stop();});

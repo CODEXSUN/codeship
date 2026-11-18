@@ -13,7 +13,7 @@ operator lock and writes its own stage log under `.codeship/apps/<name>/`.
 | Platform | 127.0.0.1:4453 | platform_master and registered platform_* tenants |
 | Core App | 127.0.0.1:4454 | app_core_app |
 | Billing | 127.0.0.1:4455 | app_billing |
-| CRM | 127.0.0.1:4456 | none |
+| CRM | 127.0.0.1:14355 | app_crm_source (existing MariaDB compatibility store) |
 | Ecommerce | 127.0.0.1:4457 | app_ecommerce; ecommerce_data uploads volume |
 | HRMS | 127.0.0.1:4458 | none |
 | Automation | 127.0.0.1:4459 | app_automation |

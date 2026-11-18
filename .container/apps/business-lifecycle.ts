@@ -1,3 +1,4 @@
+import {prepareCrmDatabase} from './crm-database.ts';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
@@ -82,7 +83,7 @@ try{
    if(registration?.encrypted_secrets)env=currentEnvironment(decryptSecrets(registration.public_id,registration.encrypted_secrets));
   }finally{await operator.db.destroy();}
   const nativeFile=path.join(workspaceRoot,'apps',name,'.env');
-  const nativeEnvironment=!prior&&existsSync(nativeFile)?parsePrivate(await readFile(nativeFile,'utf8')):{};
+  const nativeEnvironment=(!prior||name==='crm')&&existsSync(nativeFile)?parsePrivate(await readFile(nativeFile,'utf8')):{};
   if(!prior&&!Object.keys(env).length)env={...nativeEnvironment};
   for(const key of Object.keys(env))if(/_TEST_|^NODE_|^LD_|^DYLD_|^DOCKER_|^COMPOSE_/.test(key))delete env[key];
   env.CODESHIP_CONTAINER_MODE='1';env.CODESHIP_APP_NAME=name;
@@ -92,6 +93,7 @@ try{
   const credentialKey=target.prefix+'_PLATFORM_SERVICE_TOKEN',previousCredential=env[credentialKey];
   env[credentialKey]=productionServiceToken(previousCredential,nativeEnvironment[credentialKey]);
   await stage('service-credential',env[credentialKey]===previousCredential?'preserved':'generated',{scope:'independent production service'});
+  if(name==='crm')await prepareCrmDatabase(env,nativeEnvironment,docker,async()=>{await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);},stage);
   const markerFile=path.join(root,'database-import.json');
   if(target.database&&!existsSync(markerFile)){
    const database=target.database;

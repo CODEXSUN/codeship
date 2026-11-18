@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.14
+Current version: 1.0.15
 
-Release tag: v-1.0.14
+Release tag: v-1.0.15
 
-Changelog label: v 1.0.14
+Changelog label: v 1.0.15
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.15
+
+### [v 1.0.15] 2026-11-18 - CRM existing-record Docker adapter
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.15.
+- Add least-privilege CRM existing-record copy with MariaDB 11-compatible constraint names and 14355:4355 ingress. Verified copy identities/relationships, typecheck and five targeted tests; CRM v-0.1.2 deployed successfully.
 
 ## v-1.0.14
 

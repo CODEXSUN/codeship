@@ -1,3 +1,7 @@
+## 2026-11-19 — CRM existing-record Docker adapter (1.0.15)
+
+Added least-privilege MariaDB compatibility copy and CRM ingress 14355:4355. Initial copy stopped on MariaDB 11 constraint-name uniqueness; retained empty partial target and snapshot were checked, completed with unique constraint names, all 65 tables/328 rows and relationships compared. Native source unchanged. Tagged CRM v-0.1.2 deployed through CodeShip; healthy, protected reads require Platform grants, foreign origins denied, old4456 removed. Five targeted tests and typecheck passed. Unrelated source work preserved in retained pre-sync stash.
+
 # Work Record
 
 ## 2026-11-18 — Automation local database preparation
