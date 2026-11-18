@@ -9,3 +9,5 @@ The runtime wrapper selects Automation's owned supervisor and allows a bounded d
 Only the Automation-related container adapters belong to this change. Concurrent native registry/database/UI edits are not included in its source publication or application release set.
 
 Compatibility: when a legacy Platform candidate has no optional configure-local-entry.ts script, preserve its private entry settings and record that optional stage as skipped. Do not mix unrelated pending Platform entry features into a focused authorization patch. Existing deployed entry behavior and image/data identity still require the ordinary readiness/origin checks.
+
+Platform compatibility also requires production-safe password enforcement and enabling its registered private gateway. The adapter sets these runtime flags without changing users, passwords, grants or database records. Development resets, seeds and automatic login remain disabled.

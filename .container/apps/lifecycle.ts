@@ -78,7 +78,7 @@ try {
     const password=randomBytes(32).toString('base64url');
     if((await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[platformDatabaseRole])).rowCount)throw new Error('Platform service role exists without an import record.');
     env={...source};for(const key of Object.keys(env))if(key.startsWith('PLATFORM_DEV_'))env[key]='0';
-    env.NODE_ENV='production';env.PLATFORM_BIND_MODE='docker-direct';env.PLATFORM_REQUIRE_PASSWORD_CHANGE='0';env.PLATFORM_GATEWAY_ENABLED='0';
+    env.NODE_ENV='production';env.PLATFORM_BIND_MODE='docker-direct';env.PLATFORM_REQUIRE_PASSWORD_CHANGE='1';env.PLATFORM_GATEWAY_ENABLED='1';
     for(const scope of scopes){const target=new URL(scope.source);target.hostname='postgres';target.port='5432';target.pathname='/'+scope.name;target.username=platformDatabaseRole;target.password=password;target.search='?sslmode=disable';env[scope.key]=target.href;}
     // Retain encrypted recovery settings before any role/database effects.
     await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
@@ -108,6 +108,7 @@ try {
     await save(markerFile,{status:'imported',role:platformDatabaseRole,scopes:backups});
    }else if(!Object.keys(env).length){env=parseEnv(await readFile(envFile,'utf8'));}
   }finally{await admin.end();}
+  env.PLATFORM_REQUIRE_PASSWORD_CHANGE='1';env.PLATFORM_GATEWAY_ENABLED='1';
   if(!env.PLATFORM_MASTER_DATABASE_URL)throw new Error('Saved Platform settings missing.');
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
   // Load env through Node's parser: Docker --env-file does not unquote dotenv values.
@@ -125,7 +126,7 @@ try {
   const topology=ensureApplicationNetwork(docker),peers=topology.peers;
   await stage('private-network','passed',{network:topology.name,subnet:topology.subnet});
   const composeEnvFile=path.join(privateRoot,'compose.env');await writeFile(composeEnvFile,rawEnvironment(env),{mode:0o600});
-  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'0',PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
+  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'1',PLATFORM_GATEWAY_ENABLED:'1'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
   const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','runtime-network.mjs','start-platform.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
   Object.assign(definition.services.platform,{command:['node','/run/codeship/start-platform.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true}]});
   Object.assign(definition.services.platform.environment,{CODESHIP_CONTAINER_MODE:'1'});
