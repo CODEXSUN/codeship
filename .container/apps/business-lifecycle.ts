@@ -5,7 +5,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
 import path from 'node:path';
 import pg from 'pg';
-import {businessTarget,businessServiceProfile} from './business-targets.mjs';
+import {businessTarget,businessServiceProfile,productionServiceToken} from './business-targets.mjs';
 import {withSourceSnapshot} from './postgres-snapshot.ts';
 import {appRoot,workspaceRoot,openDatabase} from '../../src/api/database.ts';
 import {decryptSecrets} from '../../src/api/modules/master/application/vault.ts';
@@ -44,9 +44,9 @@ async function verify(image:string){
  if(facts.project!=='applications'||facts.health!=='healthy'||facts.image!==docker(['image','inspect',image,'--format','{{.Id}}']))throw Error('Application image or health identity mismatch.');
  await ensureMetricsCollector();for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:4450/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service===name))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
 }
-async function registry(env:Record<string,string>,version:string){
+async function registry(env:Record<string,string>,version:string,verified=false){
  const serialized=serializeDeploymentEnvironment(env);
- const row=applicationInput.parse({name,owner:'apps/'+name,project:'applications',environment:'local-docker',host:'127.0.0.1',port:target.port,version,username:'',notes:'CodeShip tagged Docker release; independent data; Platform admission required',users:installationUsers({env:serialized}).map(({hasPassword,...user})=>user),secrets:{env:serialized}});
+ const row=applicationInput.parse({name,owner:'apps/'+name,project:'applications',environment:'local-docker',host:'127.0.0.1',port:target.port,version,username:'',notes:verified?'CodeShip verified tagged Docker release and Platform admission; independent data':'CodeShip prepared tagged Docker release; runtime verification and Platform admission pending',users:installationUsers({env:serialized}).map(({hasPassword,...user})=>user),secrets:{env:serialized}});
  const payload=JSON.stringify([row]);execute(process.execPath,['scripts/register-devkits.ts'],payload);
  const state=JSON.parse(await readFile(path.join(appRoot,'.codeship/devkits/state.json'),'utf8'));
  docker(['run','--rm','-i','--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','--mount','type=volume,source=codeship_data,target=/data','--mount','type=volume,source=codeship_keys,target=/keys',state.services.codeship.image,'node','scripts/register-devkits.ts'],payload);
@@ -73,13 +73,17 @@ try{
    const registration=await operator.db.selectFrom('applications').selectAll().where('owner','=','apps/'+name).where('environment','=','local-docker').executeTakeFirst();
    if(registration?.encrypted_secrets)env=currentEnvironment(decryptSecrets(registration.public_id,registration.encrypted_secrets));
   }finally{await operator.db.destroy();}
-  if(!prior&&!Object.keys(env).length)env=parsePrivate(await readFile(path.join(workspaceRoot,'apps',name,'.env'),'utf8'));
+  const nativeFile=path.join(workspaceRoot,'apps',name,'.env');
+  const nativeEnvironment=!prior&&existsSync(nativeFile)?parsePrivate(await readFile(nativeFile,'utf8')):{};
+  if(!prior&&!Object.keys(env).length)env={...nativeEnvironment};
   for(const key of Object.keys(env))if(/_TEST_|^NODE_|^LD_|^DYLD_|^DOCKER_|^COMPOSE_/.test(key))delete env[key];
   env.CODESHIP_CONTAINER_MODE='1';env.CODESHIP_APP_NAME=name;
   env[target.prefix+'_PLATFORM_AUTH']='1';env[target.prefix+'_PLATFORM_ORIGIN']='http://127.0.0.1:4385';
   env[target.prefix+'_BROWSER_ORIGINS']=name==='zetro'?'http://127.0.0.1:'+target.port:JSON.stringify(['http://127.0.0.1:'+target.port]);
   env[target.prefix+'_WEB_PORT']=String(target.port);env[target.prefix+'_WEB_ORIGIN']='http://127.0.0.1:'+target.port;
-  env[target.prefix+'_PLATFORM_SERVICE_TOKEN']??=randomBytes(32).toString('hex');
+  const credentialKey=target.prefix+'_PLATFORM_SERVICE_TOKEN',previousCredential=env[credentialKey];
+  env[credentialKey]=productionServiceToken(previousCredential,nativeEnvironment[credentialKey]);
+  await stage('service-credential',env[credentialKey]===previousCredential?'preserved':'generated',{scope:'independent production service'});
   const markerFile=path.join(root,'database-import.json');
   if(target.database&&!existsSync(markerFile)){
    const database=target.database;
@@ -109,6 +113,7 @@ try{
   }
   const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','business-database.mjs','start-business.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
+  await registry(env,manifest.version);
   const dbTool=(command:string)=>docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/app.env,readonly','--mount','type=bind,source='+runtime+',target=/run/codeship,readonly','--entrypoint','node',manifest.image,'--env-file=/run/app.env','/run/codeship/business-database.mjs',command]);
   const plan=JSON.parse(dbTool('plan')),current:Record<string,string>={};for(const [file,hash]of Object.entries(manifest.migrations)){const key=path.basename(file,'.ts');if(current[key])throw Error('Ambiguous migration name.');current[key]=hash as string;}
   const decision=migrationDecision(plan,prior?.migrations,current);
@@ -139,7 +144,7 @@ try{
   }
   definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',network_mode:'service:platform',depends_on:{platform:{condition:'service_healthy',restart:true}},security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'};
   await save(composeFile,definition);compose(['config','--quiet']);await stage('replacement','started');compose(['up','-d','--no-build','--wait','--wait-timeout','180',name]);
-  await verify(manifest.image);docker(['exec','-i','platform','node','scripts/container-release.ts','complete'],JSON.stringify(profile));await stage('platform-admission','passed');
+  await verify(manifest.image);docker(['exec','-i','platform','node','scripts/container-release.ts','complete'],JSON.stringify(profile));await stage('platform-admission','passed');await registry(env,manifest.version,true);
   await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile});await stage('release','succeeded');
  }
 }catch(error){await stage('release','failed',{message:(error as Error).message});console.error('Application operation failed; prior images, independent data and recovery files are retained.');process.exitCode=1;}

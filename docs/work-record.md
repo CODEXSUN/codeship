@@ -398,3 +398,7 @@ Standardized all nine business app contracts and published audited source tags t
 ## 2026-11-18 - Final production profile preflight
 
 Validated all eight business manifests against Platform production admission before any application rollout. Database-free native manifests now receive the explicit reviewed Codexsun binding; mismatched app/tenant identities are rejected. Exact approved image IDs already loaded locally are reused without another transfer, with content and label checks retained. Typecheck/build and fifty-five tests passed. Prepared 1.0.9; the earlier installer tag remains unchanged. Ecommerce's source hold is resolved with forty-five passing tests and a successful tagged image build.
+
+## 2026-11-18 - Credential-isolated application admission recovery
+
+Devkits 1.0.9/1.0.6/0.1.8 and Platform 1.0.5 deployed successfully. Both Platform data scopes passed snapshot/count/identity verification with no pending migration. Core App's data copy also passed; admission stopped before container replacement on Platform's unique credential constraint because the native token had been retained. The installer now generates a separate production token, preserves independent saved credentials, and saves encrypted recovery settings before admission. Core App's verified import is retained for a safe retry. Typecheck/build and fifty-six tests passed; no SQLite migration.

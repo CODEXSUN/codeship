@@ -4,7 +4,7 @@ Codeship owns deployment, updates and maintenance for local Docker and future li
 
 - Native operator: http://127.0.0.1:4320
 - Docker registry/history UI: http://127.0.0.1:4450/registry
-- Version: 1.0.9; Compose project: devkits
+- Version: 1.0.10; Compose project: devkits
 - SQLite permanent records; encrypted application credentials and .env blocks; separate vault key.
 - Overview, Applications, approved Deployments/history, Metrics, Incidents, Registry create/edit and Settings.
 

@@ -2,3 +2,4 @@ export interface BusinessTarget {readonly name:string;readonly prefix:string;rea
 export const businessTargets:Readonly<Record<string,BusinessTarget>>;
 export function businessTarget(name:string|undefined):BusinessTarget;
 export function businessServiceProfile(target:BusinessTarget,service:Record<string,unknown>,release:{token:string;version:string;image:string}):{manifest:Record<string,unknown>;token:string;version:string;image:string};
+export function productionServiceToken(saved:string|undefined,native:string|undefined):string;

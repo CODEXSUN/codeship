@@ -21,7 +21,7 @@ pushed tag, successful image build and verified installation are distinct stages
   Zetro's disposable PostgreSQL suite passed nine. Platform's five original
   PostgreSQL suites passed and its extended gateway suite also verifies container
   admission, repeatability, version rejection and preserved user grants.
-- CodeShip passed 55 tests, including migration policies, immutable releases,
+- CodeShip passed 56 tests, including migration policies, immutable releases,
   literal environment values, target allocation and a real PostgreSQL exported
   snapshot that remains stable while another connection writes.
 - Shared UI 0.1.9 passed 60 UI and four tool tests. SDK 0.1.4 passed 11 boundary
@@ -45,6 +45,10 @@ pushed tag, successful image build and verified installation are distinct stages
   pin. UIUX 0.1.8 pins published UI 0.1.9 and passed tagged CI; the failed tag is
   retained. Production service preflight also caught unpinned native database-free
   manifests; CodeShip 1.0.9 now applies its explicit reviewed Codexsun profile.
+- Core App's first copy passed, but registration correctly rejected its copied
+  native token against Platform's unique credential constraint. CodeShip 1.0.10
+  generates an independent production credential and preserves saved independent
+  credentials. The verified import is retained for recovery; no reset is required.
 
 ## Deployment contract
 

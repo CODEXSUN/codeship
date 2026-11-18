@@ -42,6 +42,10 @@ Archive listing is a readability check, not a restore rehearsal. Retain prior
 configuration/image records; failed migrated releases need inspected recovery,
 not automatic database downgrade or deletion.
 
+Native credentials are not reused for that production registration: CodeShip
+generates an independent token, persists it encrypted before effects, and retains
+an independently configured saved token across retries/updates.
+
 Platform first registers the production service with its gateway disabled. After
 image identity, readiness, schema, missing-grant rejection, browser-origin checks
 and fresh metrics pass, Platform checks prerequisites and enables that tenant's

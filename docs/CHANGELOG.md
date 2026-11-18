@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.9
+Current version: 1.0.10
 
-Release tag: v-1.0.9
+Release tag: v-1.0.10
 
-Changelog label: v 1.0.9
+Changelog label: v 1.0.10
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.10
+
+### [v 1.0.10] 2026-11-18 - Keep production service credentials independent during installation
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.10.
+- Generate an independent production credential when importing a native service token, retaining valid independent saved credentials on retries/updates. Persist recovery settings in encrypted SQLite before admission changes and mark registry notes as prepared until verification succeeds. Fix the credential uniqueness rejection found during Core App installation without repeating its verified data import. Typecheck/build and all fifty-six tests passed; no SQLite migration.
 
 ## v-1.0.9
 
