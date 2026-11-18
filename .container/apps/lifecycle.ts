@@ -1,7 +1,7 @@
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {spawnSync} from 'node:child_process';
 import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {existsSync,realpathSync} from 'node:fs';
 import {createHash,randomBytes} from 'node:crypto';
 import {parseEnv} from 'node:util';
 import {createServer} from 'node:net';
@@ -25,8 +25,9 @@ const [mode,name,...args]=process.argv.slice(2);
 if(name!=='platform'){await import('./business-lifecycle.ts');process.exit(process.exitCode??0);}
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||name!=='platform'||!['setup','update','verify'].includes(mode))throw new Error('Use the CodeShip apps setup/update/verify shell entry.');
 if(mode!=='verify'&&(args.length!==2||args[0]!=='--release-set'))throw new Error('Supply an approved --release-set file.');
-const root=path.join(appRoot,'.codeship/apps/platform'),privateRoot=path.join(root,'private');await mkdir(privateRoot,{recursive:true,mode:0o700});
-const lockFile=path.join(appRoot,'.codeship/devkits/operation.lock'),lock=await open(lockFile,'wx',0o600);
+const operationRoot=realpathSync(path.join(appRoot,'.codeship'));
+const root=path.join(operationRoot,'apps/platform'),privateRoot=path.join(root,'private');await mkdir(privateRoot,{recursive:true,mode:0o700});
+const lockFile=path.join(operationRoot,'devkits/operation.lock'),lock=await open(lockFile,'wx',0o600);
 const run=new Date().toISOString().replace(/[:.]/g,'-'),stateFile=path.join(root,'state.json'),composeFile=path.join(root,'compose.json'),envFile=path.join(privateRoot,'runtime.env');
 const prior=existsSync(stateFile)?JSON.parse(await readFile(stateFile,'utf8')):undefined;
 async function stage(stage:string,status:string,detail:Record<string,unknown>={}){await writeFile(path.join(root,'stages.jsonl'),JSON.stringify({at:new Date().toISOString(),run,mode,stage,status,...detail})+'\n',{flag:'a',mode:0o600});console.log(stage+': '+status);}
