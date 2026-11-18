@@ -1,0 +1,1 @@
+export function migrationDecision(migrations:{applied:string[];pending:string[]},previous:Record<string,string>|undefined,current:Record<string,string>):{pending:string[];backupRequired:boolean;migrateRequired:boolean};

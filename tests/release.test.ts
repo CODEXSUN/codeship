@@ -9,6 +9,13 @@ test('release identity rejects mutable dependencies, duplicate paths and mismatc
  assert.throws(()=>validateContract(contract,'1.0.3','v-1.0.2'));
  assert.throws(()=>validateContract({...contract,baseImage:'node:latest'},'1.0.3','v-1.0.3'));
 });
+test('isolated builds require pins for every external file dependency, including public app clients',()=>{
+ const dependencies={'@workspace/ui':'file:../../packages/ui','@workspace/core-app':'file:../../apps/core-app'};
+ assert.throws(()=>validateContract(contract,'1.0.3','v-1.0.3',dependencies));
+ const complete={...contract,dependencies:[...contract.dependencies,{path:'apps/core-app',repository:'CODEXSUN/core-app',commit:'c'.repeat(40),sshSecret:'RELEASE_CORE_APP_KEY'}]};
+ assert.equal(validateContract(complete,'1.0.3','v-1.0.3',{...dependencies,execution:'file:vendor/execution.tgz'}),complete);
+ assert.throws(()=>validateContract(complete,'1.0.3','v-1.0.3',{escape:'file:../../../outside'}));
+});
 test('legacy migration adoption permits only declared equivalent line endings, never a different code hash',()=>{
  const file='src/api/modules/master/demo/database/sqlite-migrations/001.ts',manifest={owner:'devkit/codeship',migrations:{[file]:'new'},migrationLineEndings:{[file]:['old','new']}};
  assert.equal(compatibleMigrationHistory(manifest,{'001':'old'})['001'],'new');

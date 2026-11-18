@@ -4,14 +4,19 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 
-export function validateContract(contract,version,tag) {
+export function validateContract(contract,version,tag,packageDependencies={}) {
   if(contract.schema!==1||!['apps','devkit'].includes(contract.area)||!/^[a-z][a-z0-9-]*$/.test(contract.name)||contract.owner!==contract.area+'/'+contract.name||!/^CODEXSUN\/[a-z][a-z0-9-]*$/.test(contract.repository))throw new Error('Invalid release owner.');
   if(!/^\d+\.\d+\.\d+$/.test(version)||tag!=='v-'+version)throw new Error('Tag and package version must match.');
   if(!/^node:[a-zA-Z0-9._-]+@sha256:[a-f0-9]{64}$/.test(contract.baseImage))throw new Error('Pin the Node base image digest.');
   const paths=new Set([contract.owner]);
   for(const dep of contract.dependencies??[]) {
-    if(!/^(foundation|packages|infrastructure)\/[a-z][a-z0-9-]*$|^mcp-governance$/.test(dep.path)||paths.has(dep.path)||!/^CODEXSUN\/[a-z][a-z0-9-]*$/.test(dep.repository)||!/^[a-f0-9]{40}$/.test(dep.commit)||!/^RELEASE_[A-Z_]+_KEY$/.test(dep.sshSecret))throw new Error('Dependencies require unique safe paths, repositories and immutable commits.');
+    if(!/^(apps|foundation|packages|infrastructure)\/[a-z][a-z0-9-]*$|^mcp-governance$/.test(dep.path)||paths.has(dep.path)||!/^CODEXSUN\/[a-z][a-z0-9-]*$/.test(dep.repository)||!/^[a-f0-9]{40}$/.test(dep.commit)||!/^RELEASE_[A-Z_]+_KEY$/.test(dep.sshSecret))throw new Error('Dependencies require unique safe paths, repositories and immutable commits.');
     paths.add(dep.path);
+  }
+  for(const value of Object.values(packageDependencies))if(typeof value==='string'&&value.startsWith('file:')){
+    const location=path.posix.normalize(contract.owner+'/'+value.slice(5).replaceAll('\\','/'));
+    if(location.startsWith(contract.owner+'/'))continue; // App-owned vendored archive.
+    if(!paths.has(location))throw new Error('Declare every external file dependency at an immutable published commit.');
   }
   return contract;
 }
@@ -26,7 +31,7 @@ export function migrationLineEndings(root) {
 }
 async function main() {
   const root=path.resolve(import.meta.dirname,'..'),pkg=JSON.parse(readFileSync(path.join(root,'package.json'),'utf8'));
-  const contract=validateContract(JSON.parse(readFileSync(path.join(root,'.container/release.json'),'utf8')),pkg.version,process.env.GITHUB_REF_NAME??'v-'+pkg.version);
+  const contract=validateContract(JSON.parse(readFileSync(path.join(root,'.container/release.json'),'utf8')),pkg.version,process.env.GITHUB_REF_NAME??'v-'+pkg.version,{...pkg.dependencies,...pkg.devDependencies});
   const command=process.argv[2];
   if(command==='check'){console.log('Release contract valid for '+contract.owner+' v-'+pkg.version);return;}
   if(command==='context') {

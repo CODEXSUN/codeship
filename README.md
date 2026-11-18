@@ -4,7 +4,7 @@ Codeship owns deployment, updates and maintenance for local Docker and future li
 
 - Native operator: http://127.0.0.1:4320
 - Docker registry/history UI: http://127.0.0.1:4450/registry
-- Version: 1.0.7; Compose project: devkits
+- Version: 1.0.8; Compose project: devkits
 - SQLite permanent records; encrypted application credentials and .env blocks; separate vault key.
 - Overview, Applications, approved Deployments/history, Metrics, Incidents, Registry create/edit and Settings.
 
@@ -26,6 +26,8 @@ sh setup.sh --release-set /absolute/path/to/approved-set.json
 `sh update.sh --release-set ...` installs successful GitHub release images by immutable identity. Daily coding does not deploy. A checked database backup and explicit migration run occur only if migrations are pending. Image-only updates retain database/key volumes. `npm run deploy:verify` checks the deployed group. See the [tagged release standard](../../mcp-governance/docs/tagged-releases.md).
 
 Docker runs registry/history mode without a Docker socket or host execution authority. The host Codeship operator executes reviewed deployment scripts. VPS execution is not connected; host identity, private authentication and recovery require a separate implementation. Native/Docker records are independent snapshots, not a synchronized database.
+
+All reviewed business targets use the `applications` group. See the [application release adapter](.container/apps/README.md) for prerequisite order, loopback ports, isolated data copies, migration recovery and Platform admission. The app/source audit command is `node scripts/audit-app-releases.mjs`; `--contracts-only` checks deployment files and dependency pins without running source tests. Check logs separately from successful deployment stage records.
 
 Store .env/password/token/SSH settings through Registry. Secret fields are write-only; blanks retain existing values. Portable recovery needs the SQLite backup **and** its separately protected vault key. Do not commit either.
 

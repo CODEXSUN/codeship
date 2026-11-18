@@ -390,3 +390,7 @@ Operate local Docker deployments and regular updates across workspace apps, with
 - Devkits v-1.0.6/v-1.0.5/v-0.1.6 deployed and verified; CodeShip SQLite and all 11 Codeitz project IDs/owners matched the pre-update baseline. No migrations were pending.
 - Platform v-1.0.3 setup stopped before writes because infrastructure PostgreSQL already contained cx_master_db. The existing database and native source were preserved.
 - The adapter now targets platform_master and platform_codexsun under platform_service, saves encrypted recovery credentials before effects and changes routing only in the cloned master. All 48 tests passed. The corresponding Platform target validation is prepared in an isolated source checkout to preserve ongoing native-admission edits.
+
+## 2026-11-18 - All-app release contract and operator adapters
+
+Standardized all nine business app contracts and published audited source tags through the helper. Added isolated database copying with shared read-only source snapshots, candidate migration plans, checked recovery archives for pending migrations, retained Ecommerce uploads, and Platform-coordinated application admission. The applications group retains loopback SDK/gateway transport in a shared namespace and publishes distinct loopback ports. Typecheck and fifty-one tests passed, including concurrent PostgreSQL snapshot verification. See all-app-release-audit.md for source checks, CI corrections and the current Ecommerce hold. Installation results remain separate stages.

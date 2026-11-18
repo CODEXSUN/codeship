@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.7
+Current version: 1.0.8
 
-Release tag: v-1.0.7
+Release tag: v-1.0.8
 
-Changelog label: v 1.0.7
+Changelog label: v 1.0.8
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.8
+
+### [v 1.0.8] 2026-11-18 - Unify tagged application installation and migration verification
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.8.
+- Add reviewed business application release adapters with isolated PostgreSQL roles/databases, snapshot-consistent first copies, persistent Ecommerce uploads, candidate migration plans and checked recovery dumps only for pending migrations. Keep SDK/gateway traffic on loopback in the applications namespace; preserve unchanged images when reconciling Platform. Prepare admission with the gateway disabled and complete through Platform after runtime verification, without adding user grants. Add all-app source/contract audit and reject unpinned external file dependencies. Typecheck and all fifty-one CodeShip tests passed, including a real concurrent PostgreSQL snapshot test. No CodeShip SQLite migration.
 
 ## v-1.0.7
 

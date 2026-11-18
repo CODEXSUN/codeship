@@ -15,9 +15,12 @@ import {resolveReleaseImage} from '../release-image.mjs';
 import {rawEnvironment,requireRawCompose} from '../raw-environment.mjs';
 import {platformRegistration} from './platform-registration.ts';
 import {platformDatabaseScopes,platformDatabaseRole} from './platform-databases.mjs';
+import {businessTargets} from './business-targets.mjs';
+import {withSourceSnapshot} from './postgres-snapshot.ts';
 import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 const [mode,name,...args]=process.argv.slice(2);
+if(name!=='platform'){await import('./business-lifecycle.ts');process.exit(process.exitCode??0);}
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||name!=='platform'||!['setup','update','verify'].includes(mode))throw new Error('Use the CodeShip apps setup/update/verify shell entry.');
 if(mode!=='verify'&&(args.length!==2||args[0]!=='--release-set'))throw new Error('Supply an approved --release-set file.');
 const root=path.join(appRoot,'.codeship/apps/platform'),privateRoot=path.join(root,'private');await mkdir(privateRoot,{recursive:true,mode:0o700});
@@ -41,6 +44,7 @@ try {
  else {
   if(mode==='setup'&&prior)throw new Error('Platform is installed; use update.sh.');if(mode==='update'&&!prior)throw new Error('Install Platform first.');
   requireRawCompose(docker(['compose','version','--short']));
+  if(!prior)for(const target of Object.values(businessTargets))await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(target.port,'127.0.0.1',()=>probe.close(()=>resolve()));});
   if(!prior){if(docker(['ps','-aq','--filter','name=^/platform$']))throw new Error('Platform name is occupied.');await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(4453,'127.0.0.1',()=>probe.close(()=>resolve()));});}
   const set=JSON.parse(await readFile(path.resolve(args[1]),'utf8')),manifest=set.services?.platform;
   if(set.schema!==1||set.source!=='github'||!manifest)throw new Error('Approved Platform release missing.');
@@ -81,15 +85,17 @@ try {
     const backups=[];
     for(const scope of scopes){
      await stage('copy-'+scope.name,'started');const dump=path.join(privateRoot,scope.name+'-initial-'+run+'.dump');
-     execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',dump],undefined,connectionEnv(scope.source));
+     await withSourceSnapshot(scope.source,async(snapshot,original)=>{
+     execute(path.join(bin,'pg_dump'),['--snapshot='+snapshot,'--format=custom','--no-owner','--no-privileges','--file',dump],undefined,connectionEnv(scope.source));
      execute(path.join(bin,'pg_restore'),['--list',dump]);
      await admin.query('CREATE DATABASE "'+scope.name+'" OWNER '+platformDatabaseRole);await admin.query('REVOKE ALL ON DATABASE "'+scope.name+'" FROM PUBLIC');
      const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);
      execute(path.join(bin,'pg_restore'),['--single-transaction','--exit-on-error','--no-owner','--no-privileges','--dbname='+scope.name,dump],undefined,connectionEnv(target.href));
      // Compare every base-table count and stable identity digest without logging data.
-     const original=new pg.Client({connectionString:scope.source}),copy=new pg.Client({connectionString:target.href});await original.connect();await copy.connect();
-     try{const tables=(await original.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows;for(const {tablename} of tables){const quoted='"'+tablename.replaceAll('"','""')+'"';const a=await original.query('SELECT count(*)::text AS n FROM public.'+quoted),b=await copy.query('SELECT count(*)::text AS n FROM public.'+quoted);if(a.rows[0].n!==b.rows[0].n)throw new Error('Native data changed during copy; inspect the retained copy before proceeding.');}const identities=(await original.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='public_id' ORDER BY table_name")).rows;for(const {table_name}of identities){const quoted='"'+table_name.replaceAll('"','""')+'"',query='SELECT public_id FROM public.'+quoted+' ORDER BY public_id';if(JSON.stringify((await original.query(query)).rows)!==JSON.stringify((await copy.query(query)).rows))throw new Error('Copied identity verification failed.');}}finally{await original.end();await copy.end();}
+     const copy=new pg.Client({connectionString:target.href});await copy.connect();
+     try{const tables=(await original.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows;for(const {tablename} of tables){const quoted='"'+tablename.replaceAll('"','""')+'"';const a=await original.query('SELECT count(*)::text AS n FROM public.'+quoted),b=await copy.query('SELECT count(*)::text AS n FROM public.'+quoted);if(a.rows[0].n!==b.rows[0].n)throw new Error('Native data changed during copy; inspect the retained copy before proceeding.');}const identities=(await original.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='public_id' ORDER BY table_name")).rows;for(const {table_name}of identities){const quoted='"'+table_name.replaceAll('"','""')+'"',query='SELECT public_id FROM public.'+quoted+' ORDER BY public_id';if(JSON.stringify((await original.query(query)).rows)!==JSON.stringify((await copy.query(query)).rows))throw new Error('Copied identity verification failed.');}}finally{await copy.end();}
      target.hostname='postgres';target.port='5432';env[scope.key]=target.href;backups.push({database:scope.name,key:scope.key,dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});await stage('copy-'+scope.name,'passed');
+     });
     }
     // Only the copied master registry points at isolated tenant names. Native rows stay unchanged.
     const copiedURL=new URL(env.PLATFORM_MASTER_DATABASE_URL);copiedURL.hostname='127.0.0.1';copiedURL.port=String(adminConfig.port);
@@ -115,6 +121,9 @@ try {
   const network=JSON.parse(docker(['network','inspect','codebiz-infra_default']))[0],peers=network.IPAM.Config.map((row:any)=>row.Gateway).filter(Boolean).join(',');
   const composeEnvFile=path.join(privateRoot,'compose.env');await writeFile(composeEnvFile,rawEnvironment(env),{mode:0o600});
   const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'1',PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
+  definition.services.platform.ports.push(...Object.values(businessTargets).map(target=>'127.0.0.1:'+target.port+':'+target.relayPort));
+  Object.assign(definition.services.platform.environment,{PLATFORM_GATEWAY_ENABLED:'1',PLATFORM_GATEWAY_ALLOWED_ORIGINS:JSON.stringify(Object.values(businessTargets).map(target=>'http://127.0.0.1:'+target.apiPort)),PLATFORM_GATEWAY_IMAGE_UPLOADS:JSON.stringify([{appKey:'ecommerce',path:'/api/v1/desk/product-images'}])});
+  if(existsSync(composeFile)){const existing=JSON.parse(await readFile(composeFile,'utf8'));for(const name of Object.keys(businessTargets))if(existing.services?.[name])(definition.services as Record<string,unknown>)[name]=existing.services[name];if(existing.volumes)Object.assign(definition,{volumes:existing.volumes});}
   await save(composeFile,definition);docker(['compose','-p','applications','-f',composeFile,'config','--quiet']);
   const payload=JSON.stringify([platformRegistration(env,manifest.version)]);
   execute(process.execPath,['scripts/register-devkits.ts'],payload);
