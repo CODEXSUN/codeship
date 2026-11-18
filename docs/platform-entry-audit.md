@@ -23,9 +23,9 @@ Domain registration resolves the tenant. An explicitly registered app mapping se
 
 | Area | Current implementation | Remaining evidence or work |
 | --- | --- | --- |
-| Container lifecycle | Separate containers, network namespaces, addresses and own loopback ports on applications_backend; CodeShip owns operations | Verify the completed approved set and replace Platform alone |
+| Container lifecycle | Separate containers, network namespaces, addresses and own loopback ports on applications_backend; CodeShip owns operations | Verified all nine healthy endpoints; Platform replacement preserved all eight app IDs; CRM replacement preserved its eight peers |
 | Private calls | Byte-preserving bridges retain the SDK loopback allowlist, Host, Origin and request-grant checks | Exercise real Billing-to-Core user delegation and downstream revocation |
-| Identity and API gateway | Platform owns tenant/domain resolution, tenant sessions, explicit access and request-bound grants | Rerun security acceptance using disposable fixtures against the final release |
+| Identity and API gateway | Platform owns tenant/domain resolution, tenant sessions, explicit access and request-bound grants | Gateway and two tenant identity/runtime PostgreSQL suites passed; 24 existing-account checks passed without password changes. Single-entry browser and cloud acceptance remain pending |
 | Frontends | Each app currently serves its own loopback origin and same-origin Platform adapter | Single-entry frontend/assets/SPA/login routing is not implemented by these network bridges |
 | Ecommerce | App owns public catalog/customer APIs; staff APIs use Platform | A reviewed public-entry route contract must preserve that separation |
 | Data | Independent cloned databases/roles and retained uploads; existing fixed partitions remain fixed | Another tenant requires an explicitly reviewed database/service binding |
