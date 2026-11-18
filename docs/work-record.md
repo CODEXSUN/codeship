@@ -434,3 +434,11 @@ Two approved 1.0.12 update attempts stopped before replacement because the tempo
 ## 2026-11-18 - CodeShip-only port convention audit
 
 User resumed deployment for CodeShip only and assigned other app deployments to their own chats. Prepared 1.0.13 in an isolated checkout, excluding unrelated Automation/Registry/Texlinks edits. CodeShip's publication changes from 4450:4350 to loopback 14350:4350, matching the requested internal-port prefix convention. Port-change preflight checks occupancy before effects; verification checks the exact sole binding. Unselected service definitions and shared physical volumes/networks are preserved instead of regenerated. Monitoring callers use the new CodeShip address. Included the previously committed concurrent SQLite writer correction. All 61 pre-existing checks and the new selected-service retention test passed; final combined verification and deployment outcomes follow. No database schema migration.
+
+## 2026-11-18 - Strict selected-service follow-up
+
+CodeShip 1.0.13 deployed successfully on 14350:4350; registry writer locking, readiness, exact image, origin guards and fresh metrics passed with no migration. All other managed container IDs/mounts were unchanged. The post-update registry audit caught a separate group-wide payload path that rewrote Codeitz/UIUX rows and reset Codeitz's saved port to 4451, although its container remained on 14305. Restored the Native/Docker registry port to 14305 without touching ciphertext or restarting Codeitz. The changed ciphertext hashes reflected re-encryption; runtime/credential comparison is recorded separately rather than claiming hashes prove changed plaintext.
+
+Prepared 1.0.14 to scope registry payloads, environment rendering and workspace initialization to the selected service. A pre-write invariant rejects unselected/duplicate registry owners. The new regression verifies group-wide payload rejection; combined checks and final deployment follow. Unrelated owner changes remain outside this isolated release.
+
+- Final source audit: typecheck/build/version checks and all 63 tests passed. Native/Docker Codeitz/UIUX environments match; Codeitz's existing running credential/sync settings match the saved values. Registry Codeitz port is restored to 14305. No credential values were printed. Release/build and post-deployment preservation checks follow.

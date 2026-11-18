@@ -4,3 +4,8 @@ export function preserveUnselected(definition,existing,selected){
  definition.networks=structuredClone(existing.networks??definition.networks);
  return definition;
 }
+export function requireSelectedRegistry(rows,selected){
+ const owners=rows.map(row=>row.owner);
+ if(rows.length!==selected.length||new Set(owners).size!==rows.length||owners.some(owner=>!selected.some(name=>owner==='devkit/'+name)))throw Error('Registry update includes an unselected service.');
+ return rows;
+}

@@ -7,7 +7,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import pg from 'pg';
 import {codeshipHostPort,codeshipOrigin} from '../local-port.mjs';
-import {preserveUnselected} from './selection.mjs';
+import {preserveUnselected,requireSelectedRegistry} from './selection.mjs';
 import {appRoot,workspaceRoot,openDatabase} from '../../src/api/database.ts';
 import {decryptSecrets} from '../../src/api/modules/master/application/vault.ts';
 import {currentEnvironment} from '../../src/api/modules/master/application/environment.ts';
@@ -110,9 +110,11 @@ try{
   const codeitzEnvFile=path.join(privateRoot,'codeitz.env');
   const uiuxEnvFile=path.join(privateRoot,'uiux.env');
   const uiuxComposeEnv=path.join(privateRoot,'uiux.compose.env'),codeitzComposeEnv=path.join(privateRoot,'codeitz.compose.env');
-  for(const key of Object.keys(settings.uiux))if(isProtectedEnvironmentKey(key))delete settings.uiux[key];
-  await writeFile(uiuxEnvFile,serializeDeploymentEnvironment(settings.uiux),{mode:0o600});
-  await writeFile(uiuxComposeEnv,rawEnvironment(settings.uiux),{mode:0o600});
+  if(selected.includes('uiux')){
+   for(const key of Object.keys(settings.uiux))if(isProtectedEnvironmentKey(key))delete settings.uiux[key];
+   await writeFile(uiuxEnvFile,serializeDeploymentEnvironment(settings.uiux),{mode:0o600});
+   await writeFile(uiuxComposeEnv,rawEnvironment(settings.uiux),{mode:0o600});
+  }
   if(selected.includes('codeitz')){
    let savedEnv:Record<string,string>={};if(existsSync(codeitzEnvFile)){const {parseEnv}=await import('node:util');savedEnv=parseEnv(await readFile(codeitzEnvFile,'utf8'));}
    const password=(sourceRows.codeitz?.environment==='local-docker'?settings.codeitz.PGPASSWORD:undefined)??savedEnv.PGPASSWORD??randomBytes(32).toString('base64url');
@@ -149,7 +151,7 @@ try{
     await stage('codeitz-workspace','started');docker(['run','--rm','--mount','type=volume,source='+workspaceVolume+',target=/workspace','-e','CODEITZ_WORKSPACE_ROOT=/workspace','--entrypoint','node',images.codeitz.image,'.container/init-workspace.mjs']);await stage('codeitz-workspace','passed');
    }else await stage('codeitz-workspace','skipped',{reason:'Existing workspace preserved'});
   }
-  if(images.codeitz){
+  if(images.codeitz&&selected.includes('codeitz')){
    const init="const fs=require('node:fs/promises');(async()=>{const root='/workspace';await fs.access(root+'/mcp-governance/docs/governance.md');for(const owner of ['foundation/framework','packages/ui','devkit/codeitz']){const dest=root+'/'+owner+'/node_modules';try{await fs.lstat(dest);}catch(e){if(e.code!=='ENOENT')throw e;await fs.symlink('/opt/codebiz/'+owner+'/node_modules',dest);}}try{await fs.writeFile(root+'/.codeitz-workspace-initialized','Workspace managed by CodeShip; existing files are preserved.\\n',{flag:'wx'});}catch(e){if(e.code!=='EEXIST')throw e;}})().catch(()=>process.exit(1));";
    docker(['run','--rm','--entrypoint','node','--mount','type=volume,source=codeitz-docker-local_workspace,target=/workspace',images.codeitz.image,'-e',init]);
   }
@@ -171,18 +173,18 @@ try{
    }else await stage('codeitz-migration','skipped',{reason:'No pending PostgreSQL migrations'});
   }
   const payload=[];
-  for(const name of names.filter(name=>images[name])){
+  for(const name of selected){
    const source=sourceRows[name],secrets=source?.encrypted_secrets?decryptSecrets(source.public_id,source.encrypted_secrets):{};
    const savedSecrets=Object.fromEntries(['password','token','sshKey','saPassword','adminPassword','userPassword'].filter(key=>secrets[key]).map(key=>[key,secrets[key]]));
    if(name!=='codeship')savedSecrets.env=serializeDeploymentEnvironment(settings[name]);
    payload.push({name:name==='codeship'?'CodeShip':name==='codeitz'?'Codeitz':'UIUX',owner:'devkit/'+name,project:'devkits',environment:'local-docker',host:'127.0.0.1',port:ports[name],version:images[name].version,username:source?.username??'',notes:'CodeShip-managed Devkits Docker group',users:installationUsers(secrets).map(({hasPassword,...user})=>user),secrets:savedSecrets});
   }
-  const registryPayload=JSON.stringify(payload);
+  const registryPayload=JSON.stringify(requireSelectedRegistry(payload,selected));
   execute(process.execPath,['scripts/register-devkits.ts'],{input:registryPayload,quiet:true});codeShipTool(['scripts/register-devkits.ts'],registryPayload);codeShipTool(['scripts/write-runtime-environment.ts']);
   await stage('registry','passed');
   const bind=(source:string,target:string,read_only=true)=>({type:'bind',source,target,read_only});
   const service=(name:typeof names[number])=>({image:images[name].image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:[`127.0.0.1:${ports[name]}:${internal[name]}`],stop_grace_period:'45s',healthcheck:{test:['CMD','node','-e',`fetch('http://127.0.0.1:${internal[name]}/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))`],interval:'5s',timeout:'4s',start_period:'20s',retries:30}});
-  if(images.codeitz){const {parseEnv}=await import('node:util');await writeFile(codeitzComposeEnv,rawEnvironment(parseEnv(await readFile(codeitzEnvFile,'utf8'))),{mode:0o600});}
+  if(images.codeitz&&selected.includes('codeitz')){const {parseEnv}=await import('node:util');await writeFile(codeitzComposeEnv,rawEnvironment(parseEnv(await readFile(codeitzEnvFile,'utf8'))),{mode:0o600});}
   const services:Record<string,any>={
    codeship:{...service('codeship'),environment:{NODE_ENV:'production',CODESHIP_HOST:'0.0.0.0',CODESHIP_PORT:'4350',CODESHIP_BIND_MODE:'docker-direct',CODESHIP_DOCKER_PEERS:peers,CODESHIP_DEPLOYMENT_PROJECT:'devkits',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_METRICS_FILE:'/metrics/snapshot.json',CODESHIP_SQLITE_FILE:'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:'/keys/vault.key'},volumes:['codeship_data:/data','codeship_keys:/keys',bind(path.join(appRoot,'.codeship/metrics'),'/metrics'),bind(path.join(appRoot,'.container/targets.empty.json'),'/opt/codebiz/devkit/codeship/.codeship/targets.json')]},
   };
