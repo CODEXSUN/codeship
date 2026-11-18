@@ -45,3 +45,5 @@ The host metrics collector starts from CodeShip's native API and these deploymen
 ## Current CodeShip-only update
 
 CodeShip publishes on http://127.0.0.1:14350 with the mapping 127.0.0.1:14350:4350 (prefix 1 to internal port 4350). The older table above is historical. This update changes CodeShip only: other owners' images, ports, commands, runtime settings and physical volumes are retained exactly. Each app chat owns its own next deployment. Use the per-service codeship/update.sh and codeship/verify.sh entries with an explicit approved release set; do not invoke the all-services update for this task.
+
+The verified CodeShip release is v-1.0.14. When the primary checkout contains other chats' unfinished changes, use its retained release-matched host operator under .codeship/operators/v-1.0.14 for CodeShip-only maintenance. Do not run an older working-folder group updater against newer per-service settings. Unselected registry rows, runtime environments and Compose service definitions are now guarded against modification. See docs/work-record.md for the corrected v1.0.13 finding and final preservation evidence.
