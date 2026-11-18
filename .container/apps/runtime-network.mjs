@@ -14,7 +14,7 @@ export function bridgePlan(name){
 export function startContainerService(name){
  if(process.env.CODESHIP_CONTAINER_MODE!=='1'||!existsSync('/.dockerenv')||process.cwd()!=='/opt/codebiz/apps/'+name)throw Error('Use the approved CodeShip container runtime.');
  const target=name==='platform'?null:businessTarget(name);
- const child=spawn(process.execPath,['src/api/server.ts'],{stdio:'inherit',env:{...process.env,...(target?{[target.prefix+'_HOST']:'127.0.0.1',[target.prefix+'_PORT']:String(target.apiPort)}:{})}});
+ const child=spawn(process.execPath,[name==='automation'?'scripts/runtime.ts':'src/api/server.ts'],{stdio:'inherit',env:{...process.env,...(target?{[target.prefix+'_HOST']:'127.0.0.1',[target.prefix+'_PORT']:String(target.apiPort)}:{})}});
  const sockets=new Set(),servers=[];let stopping=false;
  function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),35000);deadline.unref();}
  for(const route of bridgePlan(name)){

@@ -1,3 +1,4 @@
+import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
 import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
@@ -134,6 +135,7 @@ try{
   const registered=JSON.parse(docker(['exec','-i','platform','node','scripts/container-release.ts','prepare'],JSON.stringify(profile)));
   env[target.prefix+'_PLATFORM_SERVICE_ID']=registered.serviceId;env[target.prefix+'_PLATFORM_TENANT_ID']=registered.tenantId;
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);
+  if(name==='automation'){await prepareAutomationRedis(env,docker,async()=>{await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);});await stage('worker-redis','passed',{scoped:true});}
   const composeEnv=path.join(privateRoot,'compose.env');await writeFile(composeEnv,rawEnvironment(env),{mode:0o600});
   const definition=JSON.parse(await readFile(composeFile,'utf8')),topology=ensureApplicationNetwork(docker);
   if(definition.services.platform.network_mode||!definition.services.platform.networks?.backend)throw Error('Update Platform to the independent-container network before installing applications.');
@@ -150,7 +152,7 @@ try{
    }
    definition.volumes??={};definition.volumes[volume]={external:true,name:volume};dataVolumes.push({type:'volume',source:volume,target:'/opt/codebiz/apps/ecommerce/data'});
   }
-  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'};
+  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:name==='automation'?'120s':'45s'};
   applyIndependentNetwork(definition.services[name],name,topology);
   await stage('private-network','passed',{network:topology.name,address:topology.addresses[name]});
   await save(composeFile,definition);compose(['config','--quiet']);await stage('replacement','started');compose(['up','-d','--no-build','--wait','--wait-timeout','180',name]);
