@@ -144,3 +144,7 @@ vite.config.ts.timestamp-*
 
 # Codeship operator-only configuration
 .codeship/
+*.sqlite
+*.sqlite-*
+*.dump
+*.key

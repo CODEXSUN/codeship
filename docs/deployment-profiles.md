@@ -1,6 +1,6 @@
 # Deployment profiles
 
-Codeship owns the operations record. Each managed app owns its Docker files, migration commands, backups and deployment behavior. Codeship does not copy Codeitz's application-specific deployment script into unrelated apps.
+Codeship exclusively owns deployment orchestration, approvals, backups, updates and maintenance for local Docker and live VPS. Managed apps own build/test, Docker recipes and schema/health contracts. Existing app entry points below are legacy test adapters called by Codeship; they do not grant other apps permission to deploy live. See [Codeship lifecycle](docker-lifecycle.md) and [central ownership policy](../../../mcp-governance/docs/codeship-operations.md).
 
 ## Register another application
 
@@ -38,10 +38,10 @@ Codeship launches Node directly with argument arrays, no shell or arbitrary brow
 
 The environment must declare matching `COMPOSE_PROJECT_NAME` and `HOST_PORT`. The public app health route is `/api/health` on that loopback port. Compose resources must use the matching project label. Exit zero means success; nonzero means failure. Bounded stdout/stderr is saved with known secrets redacted. Never emit credentials, user request bodies or database dumps to stdout.
 
-App deploy/update must guard concurrent operations and active workers, preserve volumes/IDs, back up PostgreSQL before migrations, run explicit migrations, avoid update reseeding, verify replacement health and retain recovery artifacts. No automatic destructive rollback. Initial setup refuses retained installations; interrupted initial setup recovery stays a deliberate app-owned operator action.
+App deploy/update must guard concurrent operations and active workers, preserve volumes/IDs, back up the target database only when migrations are pending, run explicit migrations, avoid update reseeding, verify replacement health and retain recovery artifacts. No automatic destructive rollback. Initial setup refuses retained installations; interrupted initial setup recovery stays a deliberate app-owned operator action.
 
 ## Approval, retries and recovery
 
-Every run needs a separate confirmation and unique request key. Retrying that same request key returns the saved run, including after refresh/restart; a conflicting action/key is rejected. PostgreSQL enforces one running operation per target, while the app script's own lock protects other launchers.
+Every run needs a separate confirmation and unique request key. Retrying that same request key returns the saved run, including after refresh/restart; a conflicting action/key is rejected. SQLite enforces one running operation per target, while the app script's own lock protects other launchers.
 
 Codeship never automatically retries deployments. On server interruption, running records become Interrupted with preserved output. The Docker operation may still be running: inspect containers, app logs and its lock before retrying. Do not delete deployment locks or restore a database merely because Codeship restarted. There is no unsafe Stop button for migrations.

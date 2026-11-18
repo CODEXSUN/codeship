@@ -1,0 +1,4 @@
+export type MetricCategory='infra'|'apps'|'devkits';
+export interface DockerMetric {id:string;name:string;project:string;service:string;owner:string;category:MetricCategory;state:string;health:string;image:string;ports:string;startedAt:string;restarts:number;cpuPercent:number|null;memoryBytes:number|null;memoryLimitBytes:number|null;networkRxBytes:number|null;networkTxBytes:number|null;blockReadBytes:number|null;blockWriteBytes:number|null;pids:number|null;writableBytes?:number|null;volumeBytes?:number|null;storageBytes?:number|null;storageMeasuredAt?:string;diskUsedBytes?:number|null;diskTotalBytes?:number|null;}
+export interface DockerMetricSnapshot {collectedAt:string;available:boolean;engine?:{cpus:number;memoryBytes:number};containers:DockerMetric[];}
+export interface DockerMetricReport extends DockerMetricSnapshot {category:MetricCategory;stale:boolean;}

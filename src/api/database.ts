@@ -1,20 +1,29 @@
-import { Kysely, PostgresDialect } from 'kysely';
-import { Pool } from 'pg';
-import { loadServerEnvironment } from '@workspace/framework';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import {Kysely,SqliteDialect} from 'kysely';
+import {DatabaseSync} from 'node:sqlite';
+import {mkdirSync,chmodSync} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import type {TargetDatabase} from './modules/master/deployment-target/database/types.ts';
 import type {DeploymentDatabase} from './modules/business/deployment/database/types.ts';
 import type {MonitorDatabase} from './modules/business/monitor/database/types.ts';
-export type CodeshipDatabase=TargetDatabase & DeploymentDatabase & MonitorDatabase;
-export const appRoot = fileURLToPath(new URL('../../', import.meta.url));
-export const workspaceRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-export function settings() { return loadServerEnvironment({root:appRoot,prefix:'CODESHIP',defaultPort:4350}); }
-export function openDatabase() {
- const v=settings().values;
- const host=v.PGHOST??'127.0.0.1', schema=v.CODESHIP_PG_SCHEMA??'codeship', mode=v.PGSSLMODE??'verify-full';
- if(!/^[a-z][a-z0-9_]{0,50}$/.test(schema))throw new Error('Invalid Codeship schema.');
- if(mode!=='verify-full'&&!(mode==='disable'&&['127.0.0.1','localhost','::1'].includes(host)))throw new Error('Remote PostgreSQL requires verified TLS.');
- const db=new Kysely<CodeshipDatabase>({dialect:new PostgresDialect({pool:new Pool({host,port:Number(v.PGPORT??5432),database:v.PGDATABASE??'codeship',user:v.PGUSER,password:v.PGPASSWORD,max:5,connectionTimeoutMillis:5000,ssl:mode==='disable'?false:{rejectUnauthorized:true,...(v.PGSSLROOTCERT?{ca:readFileSync(v.PGSSLROOTCERT,'utf8')}:{})}})})}).withSchema(schema);
- return {db,schema};
+import type {RegistryDatabase} from './modules/master/application/database/types.ts';
+import type {InfrastructureDatabase} from './modules/master/infrastructure-service/database/types.ts';
+export type CodeshipDatabase=TargetDatabase & DeploymentDatabase & MonitorDatabase & RegistryDatabase & InfrastructureDatabase;
+export const appRoot=fileURLToPath(new URL('../../',import.meta.url));
+export const workspaceRoot=fileURLToPath(new URL('../../../../',import.meta.url));
+export function databaseFile(){return path.resolve(process.env.CODESHIP_SQLITE_FILE??path.join(appRoot,'.codeship/data/codeship.sqlite'));}
+export function openDatabase(file=databaseFile()){
+ if(file!==':memory:')mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+ const sqlite=new DatabaseSync(file);if(file!==':memory:')chmodSync(file,0o600);
+ sqlite.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
+ const bind=(values:readonly unknown[])=>values.map(v=>v instanceof Date?v.toISOString():typeof v==='boolean'?Number(v):v) as any[];
+ const normalize=(rows:Record<string,unknown>[])=>rows.map(row=>{for(const key of ['healthy','active'])if(key in row)row[key]=Boolean(row[key]);return row;});
+ const adapter={close:()=>sqlite.close(),prepare(sql:string){const statement=sqlite.prepare(sql);return {
+  reader:statement.columns().length>0,
+  all:(values:readonly unknown[])=>normalize(statement.all(...bind(values))),
+  run:(values:readonly unknown[])=>statement.run(...bind(values)),
+  iterate:(values:readonly unknown[])=>statement.iterate(...bind(values)),
+ };}};
+ const db=new Kysely<CodeshipDatabase>({dialect:new SqliteDialect({database:adapter as any})});
+ return {db,sqlite,schema:'main'};
 }

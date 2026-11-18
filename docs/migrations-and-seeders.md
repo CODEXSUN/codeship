@@ -1,3 +1,5 @@
+> Codeship-specific override (2026-11-17): permanent data now uses SQLite, with module-local `database/sqlite-migrations/` and an independent ordered history. Published PostgreSQL migrations are retained unchanged for the preserved legacy source. See [Docker lifecycle](docker-lifecycle.md) and [central policy](../../../mcp-governance/docs/codeship-operations.md). PostgreSQL guidance below remains historical/template context for other products.
+
 # Persistent modules
 
 Follow the central Migrations and seeders guide through AGENTS.md before adding database modules. Use common/master/business categories, singular module folders, plural tables, explicit module-local migrations/seeders and the minimal routes/service/repository and page/form/services roles. Internal integer identity keys are private; public_id is eight lowercase letters/numbers stored unchanged in unique varchar(32). Standard entity/audit/lifecycle/tenant rules remain server-owned.

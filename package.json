@@ -1,6 +1,6 @@
 {
   "name": "@workspace/codeship",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -25,11 +25,25 @@
     "check:versions": "node tools/check-versions.mjs",
     "db:migrate": "node scripts/database.ts migrate",
     "db:status": "node scripts/database.ts status",
-    "db:seed": "node scripts/database.ts seed"
+    "db:seed": "node scripts/database.ts seed",
+    "deploy:setup": "node .container/run-script.mjs setup",
+    "deploy:update": "node .container/run-script.mjs update",
+    "deploy:verify": "node .container/run-script.mjs verify",
+    "metrics:collect": "node scripts/collect-docker-metrics.ts --once",
+    "metrics:watch": "node scripts/collect-docker-metrics.ts --watch",
+    "infra:group": "node scripts/group-infrastructure.ts",
+    "infra:deploy": "node scripts/deploy-infrastructure.ts",
+    "infra:generate": "node scripts/generate-infrastructure.ts",
+    "db:backup": "node scripts/backup.ts",
+    "vault:init": "node scripts/initialize-vault.ts",
+    "inventory:import": "node scripts/inventory.ts",
+    "dev:api": "node --watch src/api/server.ts",
+    "dev:web": "vite"
   },
   "dependencies": {
     "@workspace/framework": "file:../../foundation/framework",
     "@workspace/ui": "file:../../packages/ui",
+    "bcryptjs": "3.0.3",
     "kysely": "0.29.9",
     "lucide-react": "1.73.0",
     "pg": "8.23.1",

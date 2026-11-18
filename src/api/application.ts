@@ -8,11 +8,18 @@ import {monitorService} from './modules/business/monitor/service.ts';
 import {registerTargetRoutes} from './modules/master/deployment-target/routes.ts';
 import {registerDeploymentRoutes} from './modules/business/deployment/routes.ts';
 import {registerMonitorRoutes} from './modules/business/monitor/routes.ts';
+import {registerApplicationRoutes} from './modules/master/application/routes.ts';
+import {registerInfrastructureRoutes} from './modules/master/infrastructure-service/routes.ts';
 import {specification} from './openapi.ts';
+import {codeshipAccessPolicy} from './local-access.ts';
 export function createApplication(db:Database){
- const app=createHttpServer({name:'codeship',readinessChecks:[async()=>{await Promise.all([db.selectFrom('deployment_targets').select('id').limit(1).execute(),db.selectFrom('deployment_runs').select('id').limit(1).execute(),db.selectFrom('observations').select('id').limit(1).execute(),db.selectFrom('incidents').select('id').limit(1).execute()]);return true;}]}),deployments=deploymentService(db),monitor=monitorService(db,undefined,deployments.repo.maintenanceTargets);
- app.addHook('onRequest',requireLocalRequest);
+ const app=createHttpServer({name:'codeship',readinessChecks:[async()=>{await Promise.all([db.selectFrom('infrastructure_services').select('id').limit(1).execute(),db.selectFrom('deployment_targets').select('id').limit(1).execute(),db.selectFrom('deployment_runs').select('id').limit(1).execute(),db.selectFrom('observations').select('id').limit(1).execute(),db.selectFrom('incidents').select('id').limit(1).execute()]);return true;}]}),deployments=deploymentService(db),monitor=monitorService(db,undefined,deployments.repo.maintenanceTargets);
+ const localAccess=codeshipAccessPolicy(process.env.CODESHIP_BIND_MODE==='docker-direct'?(process.env.CODESHIP_DOCKER_PEERS??'').split(',').filter(Boolean):[]);
+ app.addHook('onRequest',localAccess);
+ // Keep shared documentation rendering, using this app's transport policy for its local-only routes.
+ app.addHook('onRoute',route=>{if(['/api/docs','/api/openapi.json'].includes(route.url))route.preHandler=localAccess;});
+ app.get('/api/v1/capabilities',async()=>({execution:process.env.CODESHIP_EXECUTION_MODE!=='inventory',mode:process.env.CODESHIP_EXECUTION_MODE==='inventory'?'inventory':'local-operator'}));
  app.setErrorHandler((error,request,reply)=>{const e=error as {statusCode?:number};if(error instanceof ZodError)return reply.code(400).send({message:'Provide valid operation fields.'});if(e.statusCode&&e.statusCode>=400&&e.statusCode<500)return reply.code(e.statusCode).send({message:(error as Error).message});return reply.code(500).send({message:'Codeship could not complete this request. Check the deployment configuration and database.'});});
- registerTargetRoutes(app,db);registerDeploymentRoutes(app,deployments);registerMonitorRoutes(app,monitor);registerApiDocumentation(app,specification);registerFrontend(app,path.join(appRoot,'dist/web'));
+ registerInfrastructureRoutes(app,db);registerApplicationRoutes(app,db);registerTargetRoutes(app,db);registerDeploymentRoutes(app,deployments);registerMonitorRoutes(app,monitor);registerApiDocumentation(app,specification);registerFrontend(app,path.join(appRoot,'dist/web'));
  return {app,deployments,monitor};
 }

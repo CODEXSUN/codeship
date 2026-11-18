@@ -2,14 +2,17 @@ import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import type {Action} from '../../../../../contracts/operations.ts';
 import {resolveProfile} from '../../master/deployment-target/index.ts';
+import {prepareDeploymentEnvironment} from '../../master/application/index.ts';
+import type {Database} from '../../../identity.ts';
 const execute=promisify(execFile);
 export function redact(text:string,secrets:string[]=[]){
  let clean=text.replace(/\u001b\[[0-9;]*[a-zA-Z]/g,'');
  for(const secret of secrets.filter(s=>s.length>=4).sort((a,b)=>b.length-a.length))clean=clean.replaceAll(secret,'[REDACTED]');
  return clean.replace(/(postgres(?:ql)?:\/\/[^:\s/]+:)[^@\s]+@/gi,'$1[REDACTED]@').replace(/(authorization\s*[=:]\s*)(?:Bearer|Basic)\s+\S+/gi,'$1[REDACTED]').replace(/((?:password|token|secret|authorization|api[_-]?key)\s*[=:]\s*)\S+/gi,'$1[REDACTED]');
 }
-export async function runLocal(key:string,action:Action,onLine:(line:string)=>void):Promise<number>{
- const {root,script,envFile,environment}=await resolveProfile(key);
+export async function runLocal(key:string,action:Action,onLine:(line:string)=>void,db?:Database):Promise<number>{
+ const {root,script,envFile,profile,environment:originalEnvironment}=await resolveProfile(key);
+ const environment=db&&['deploy','update'].includes(action)?await prepareDeploymentEnvironment(db,profile,envFile):originalEnvironment;
  const secrets=Object.entries(environment).filter(([key])=>/password|token|secret|key/i.test(key)).map(([,v])=>v).filter((v):v is string=>!!v);
  const mode=action==='deploy'?'setup':action==='check'?'update':action;
  const args=[script,mode,'--env',envFile,...(action==='check'?['--check']:[])];

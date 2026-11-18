@@ -1,0 +1,35 @@
+# Docker metric reports
+
+Reports in the application header links to Infra Metric (`/reports/infra-metric`), App Metric (`/reports/app-metric`) and Devkit Metric (`/reports/devkit-metric`). Each report has its own filtered container table, running count, CPU total, memory total and header Refresh. It uses the shared Master List with search, column controls and pagination. Navigating categories remounts the report to prevent displaying another category's prior data.
+
+The native CodeShip API starts the host collector automatically and checks every 15 seconds that it is running. Docker setup/update/verify also starts it automatically and requires a fresh snapshot before verification succeeds. Repeated starts reuse the existing PID-locked collector. `npm run metrics:watch` remains a manual option; `npm run metrics:collect` takes one snapshot. It reads Docker metadata/stats and the native host operator registry plus the verified Infrastructure group manifest. Infrastructure matches exact registered group/service pairs; Apps and Devkits match local-Docker registry projects and owner prefixes. Unregistered Docker projects and native processes are excluded. New Docker UI-only registrations do not silently change the host operator's classification policy; register their project with the host operator as well.
+
+Current host inventory: four Infra containers in codebiz-infra, one Devkit container (codeship), and no deployed App containers. Stopped registered containers remain visible with unavailable utilization rather than fabricated zero values. The collector polls approximately every five seconds plus Docker collection time; the UI fetches every five seconds. Snapshots older than 45 seconds, malformed snapshots and Docker/collector failures are visibly unavailable or stale. A missing Docker healthcheck is shown as Not configured, not healthy.
+
+Metrics include CPU percent, used/limit memory, cumulative network RX/TX and block read/write bytes, process count, restart count, health, state, start time, ports and image. Memory limit may reflect the whole Docker engine allocation when no per-container cap exists. These reports show current snapshots, not historical time-series or alerting.
+
+Snapshots are written atomically to ignored `.codeship/metrics/snapshot.json`. A host collector process is running now with a PID lock and private log files. It is not an operating-system startup service: after a host reboot, starting the native CodeShip API or running its deployment command starts collection again. The host worker remains running across Docker app replacements and retries collection while Docker is unavailable. Docker CodeShip mounts only that directory read-only at /metrics; no Docker socket, credentials, environment files or Docker CLI execution authority are added to the container. The local protected GET `/api/v1/docker-metrics/:category` validates the snapshot and filters it server-side. Existing local-peer/Host/Origin guards remain in force.
+
+The current deployment uses the Reports pages at http://127.0.0.1:4450. Native development also supports them at 4320. No SQLite schema migration was needed, and Docker updates skipped migration/backup while retaining data/key volumes. Classification/staleness tests, typecheck and builds passed; API and browser verification cover the real category counts and menu navigation.
+
+## Card and Show layout
+
+Reports now use simple container cards: service/group, state, health, CPU and memory. View details opens `/reports/{infra-metric|app-metric|devkit-metric}/{container-id}` with shared Record Detail v1 sections for container identity, connection and full runtime metrics. The app header provides Back to cards and Refresh. Deep links keep the report category; a removed container displays a missing-record message. Current snapshots continue refreshing every five seconds on both views.
+
+CPU and memory sparklines use up to 60 distinct fresh samples retained in page memory during a report visit. They start after two valid samples, reset after collection gaps over 35 seconds, and reset on reload/category switch. The host collector must be running for graphs to accumulate; stale snapshots are not appended. Card header circles expose separate runtime and health labels, with green success, red failure, amber other/unconfigured and grey stale state.
+
+
+Collection now waits five seconds between Docker samples and pages refresh every five seconds, targeting initial graphs within 10–20 seconds under normal local load. Docker collection time is additional; this is not a hard deadline.
+
+Disk rings show `df -Pk /` filesystem used/capacity, not cumulative block I/O or a per-container storage quota. Containers commonly share the Docker engine root filesystem, so their usage percentages may match. The collector executes only this fixed read-only command in registered running containers; unavailable df returns null. CPU, memory and disk graphs occupy one row on cards and Show pages.
+
+
+## Actual container storage (current behavior)
+
+The shared Docker filesystem remains in the top summary only. Individual cards show SizeRw writable-layer bytes plus mounted-data bytes, including named/anonymous volumes and bind mounts. Image layers and Docker-managed log files are excluded. Attached shared data is included for every container that can access it, so per-container totals must not be summed to infer unique host usage. Read-only fixed du/stat commands inspect registered running containers without printing file contents or credentials. Nested mounts on the same device are subtracted before adding their own measurement, avoiding duplicate counting. A failed/unsupported scan yields unavailable rather than a false zero. Stopped containers may still have writable-layer bytes but a total is unavailable without measuring mounted data.
+
+Storage scans are cached for 30 seconds per container ID; Show displays their measurement time and writable/mounted breakdown. CPU/memory collection remains faster. No disk quota is assumed for individual containers; card disk figures are bytes rather than a fabricated capacity percentage.
+
+Top CPU and memory rings show the current category's containers as a share of Docker engine capacity. CPU normalizes Docker per-core percentages by the engine CPU count; memory divides summed container usage by engine memory once, without adding shared limits. Shared disk retains its own capacity ring. Engine metadata unavailable means the corresponding ring is unavailable.
+
+Applications (`/applications`) and Devkits (`/devkits`) use these metric cards as their main list, with separate sidebar items and header New actions. Whole-card Docker links open `/applications/containers/:id` or `/devkits/containers/:id`; configured-only records open their category's `/records/:id` Show page. New/Edit reuse encrypted registry persistence and retain app/devkit owner separation. Native registrations show no Docker metrics until deployed with matching local-Docker ownership/project metadata.

@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "name": "codeship",
+  "area": "devkit",
+  "owner": "devkit/codeship",
+  "repository": "CODEXSUN/codeship",
+  "baseImage": "node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1",
+  "dependencies": [
+    {
+      "path": "foundation/framework",
+      "repository": "CODEXSUN/framework",
+      "commit": "2d5c45e02855ab8553f403a728bd8ec0c3d84a95",
+      "sshSecret": "RELEASE_FRAMEWORK_KEY"
+    },
+    {
+      "path": "packages/ui",
+      "repository": "CODEXSUN/ui",
+      "commit": "1fa5d19f719fbecde4e0b302fcd9f7c94e1ed3ae",
+      "sshSecret": "RELEASE_UI_KEY"
+    }
+  ]
+}

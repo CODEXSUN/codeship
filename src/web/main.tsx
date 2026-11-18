@@ -7,5 +7,5 @@ import { Application } from './modules/home/page';
 import '../styles/index.css';
 
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><DesignSystemProvider storageKey={`${appDetails.name}.ui.preferences`}><Application /><Toaster /></DesignSystemProvider></React.StrictMode>,
+  <React.StrictMode><DesignSystemProvider migrateToSilver storageKey={`${appDetails.name}.ui.preferences`}><Application /><Toaster /></DesignSystemProvider></React.StrictMode>,
 );

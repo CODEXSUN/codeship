@@ -2,10 +2,17 @@ import { loadServerEnvironment, requirePreflight } from '@workspace/framework';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appDetails } from '../contracts/app.ts';
+import {existsSync} from 'node:fs';
+import {codeshipAccessPolicy} from '../src/api/local-access.ts';
 
 export const appRoot = fileURLToPath(new URL('../', import.meta.url));
 export async function preflight() {
   const config = loadServerEnvironment({ root: appRoot, prefix: appDetails.prefix, defaultPort: appDetails.port });
+  const direct=config.values.CODESHIP_BIND_MODE==='docker-direct';
+  if(direct){
+    if(!existsSync('/.dockerenv')||config.host!=='0.0.0.0'||config.values.CODESHIP_EXECUTION_MODE!=='inventory'||!config.values.CODESHIP_DOCKER_PEERS)throw new Error('Direct Docker binding requires the reviewed isolated container configuration.');
+    codeshipAccessPolicy(config.values.CODESHIP_DOCKER_PEERS.split(','));
+  }else if(!['127.0.0.1','localhost','::1'].includes(config.host))throw new Error('Native Codeship must bind to loopback.');
   await requirePreflight({
     name: appDetails.name, root: appRoot, host: config.host, port: config.port,
     requiredPaths: [
