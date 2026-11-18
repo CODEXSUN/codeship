@@ -367,3 +367,8 @@ Operate local Docker deployments and regular updates across workspace apps, with
 ## 2026-11-18 — Controlled tagged workflow dispatch
 
 - GitHub accepted the first release branch/tag but no workflow run was registered. Added an explicit tag-selected dispatch path for controlled bootstrap/retry. Earlier tags remain intact. A pushed tag is not a verified image; deployment remains gated on successful CI and release manifests. Prepared 1.0.4; no new database migration.
+
+
+## 2026-11-18 — Hermetic release verification
+
+- GitHub v-1.0.4 failed before image publication because operations tests required ignored local target settings. Tests now use temporary profiles, inert scripts and isolated SQLite with injected resolvers. Typecheck and all 43 tests passed. Prepared v-1.0.5; prior failed tags retained and no unverified container deployed.

@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.4
+Current version: 1.0.5
 
-Release tag: v-1.0.4
+Release tag: v-1.0.5
 
-Changelog label: v 1.0.4
+Changelog label: v 1.0.5
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.5
+
+### [v 1.0.5] 2026-11-18 - Isolate release verification from operator settings
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.5.
+- Remove private operator-profile dependencies from operations tests using isolated temporary workspace fixtures and injected profile resolution. Typecheck and all 43 tests pass; production defaults and databases are unchanged.
 
 ## v-1.0.4
 
