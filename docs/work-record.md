@@ -422,3 +422,7 @@ The broader single-public-entry frontend/cloud handoff is recorded in platform-e
 ## 2026-11-18 - Confirmed future ingress direction
 
 User selected app subdomains rather than shared-host paths. Continue local Docker for now; future live domains are codexsun.com and its subdomains, with explicitly verified tenant/app mappings for customer custom domains. Use Cloudflare Tunnel for public HTTPS to the private Platform HTTP origin; no Nginx service. No DNS, tunnel, VPS or public-management exposure was performed. Single-entry frontend/asset routing and authenticated ingress remain explicitly identified work, rather than being claimed by the completed separate-container rollout.
+
+## 2026-11-18 - Local Platform entry adapter
+
+Prepared 1.0.12 with the candidate-owned explicit local-host registration stage. Bindings remain encrypted in the Platform registry environment and are passed through raw private runtime configuration. The adapter refuses tenant-domain conflicts or disabled shared hosts and does not verify customer domains automatically. Included the existing reviewed optional password-change policy default. Typecheck/build and all 60 CodeShip tests passed; no schema migration. Runtime outcomes follow after successful tagged images.

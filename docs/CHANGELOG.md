@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.11
+Current version: 1.0.12
 
-Release tag: v-1.0.11
+Release tag: v-1.0.12
 
-Changelog label: v 1.0.11
+Changelog label: v 1.0.12
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.12
+
+### [v 1.0.12] 2026-11-18 - Configure explicit local Platform application entry hosts
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.12.
+- Configure explicit local application entry hosts through the approved Platform candidate adapter before replacement. Preserve private runtime settings and separate containers. Include the reviewed password-policy default clarification. Typecheck/build and all 60 tests passed; no schema migration.
 
 ## v-1.0.11
 
