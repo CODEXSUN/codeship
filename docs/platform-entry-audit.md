@@ -39,3 +39,7 @@ The source native authentication audit is in Platform's auth-gate-rollout.md. It
 Platform owns 4453. Core App, Billing, CRM, Ecommerce, HRMS, Automation, Zetro and Texlinks own 4454 through 4461 respectively. Devkits retain 4450 through 4452 in their separate group. PostgreSQL is shared infrastructure with separate app roles/databases. Apps receive neither a Docker socket nor host publishing credentials.
 
 Do not weaken loopback/SSRF checks to accept arbitrary Docker DNS destinations. Platform continues using registered loopback service URLs; reviewed byte bridges provide the private transport without changing request authority. Platform replacement must leave app IDs and persisted data unchanged.
+
+## Selected ingress direction
+
+The user selected registered app subdomains, local Docker now, and codexsun.com plus its subdomains for a later live rollout. Customer domains must be explicitly verified and mapped to their tenant and app. Cloudflare Tunnel supplies the public HTTPS entry and forwards to the private Platform HTTP origin. No Nginx container is required. This choice does not create DNS records, customer mappings, a tunnel or a live VPS deployment. Keep the CodeShip/Devkit management origins private. The future adapter must preserve the original reviewed host and HTTPS origin through an authenticated, trusted ingress; arbitrary forwarded headers cannot establish authority. The currently verified Docker adapter remains loopback-only.
