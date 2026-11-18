@@ -1,5 +1,6 @@
 name: Tagged container release
 on:
+  workflow_dispatch:
   push:
     tags: ['v-*.*.*']
 permissions:

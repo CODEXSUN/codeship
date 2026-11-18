@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.3
+Current version: 1.0.4
 
-Release tag: v-1.0.3
+Release tag: v-1.0.4
 
-Changelog label: v 1.0.3
+Changelog label: v 1.0.4
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.4
+
+### [v 1.0.4] 2026-11-18 - Controlled tagged workflow dispatch
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.4.
+- Add explicit dispatch on a selected version tag for initial workflow registration/retry. CodeShip accepts only a successful run for that exact tag and commit. Initial tags remain unchanged; no unverified image has been deployed. No new database migration.
 
 ## v-1.0.3
 

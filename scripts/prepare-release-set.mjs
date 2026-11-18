@@ -11,7 +11,7 @@ for(const entry of entries) {
  if(services[name])throw new Error('Duplicate release selection.');
  const commit=await githubApi('/repos/'+repository+'/commits/'+tag);
  const runs=await githubApi('/repos/'+repository+'/actions/runs?head_sha='+commit.sha+'&per_page=100');
- if(!runs.workflow_runs.some(run=>run.path==='.github/workflows/release.yml'&&run.event==='push'&&run.status==='completed'&&run.conclusion==='success'))throw new Error(name+' tagged release workflow has not succeeded.');
+ if(!runs.workflow_runs.some(run=>run.path==='.github/workflows/release.yml'&&['push','workflow_dispatch'].includes(run.event)&&run.head_branch===tag&&run.status==='completed'&&run.conclusion==='success'))throw new Error(name+' tagged release workflow has not succeeded.');
  const release=await githubApi('/repos/'+repository+'/releases/tags/'+tag);
  if(release.draft||release.prerelease)throw new Error('Release is not approved for stable deployment.');
  const asset=release.assets.find(asset=>asset.name==='release-manifest.json');if(!asset)throw new Error('Release manifest missing.');
