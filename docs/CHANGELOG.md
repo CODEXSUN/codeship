@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.13
+Current version: 1.0.14
 
-Release tag: v-1.0.13
+Release tag: v-1.0.14
 
-Changelog label: v 1.0.13
+Changelog label: v 1.0.14
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.14
+
+### [v 1.0.14] 2026-11-18 - Restrict single-service maintenance to selected registry and runtime files
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.14.
+- Limit registry payloads, rendered environments and workspace maintenance to the selected service. Refuse unselected or duplicate registry owners before writes. Correct the v1.0.13 audit finding that rewrote Codeitz/UIUX registry rows while preserving their containers; Codeitz registry port restored to 14305 without changing its credentials. Preserve all unselected runtime definitions, metadata and secret bytes. No database migration.
 
 ## v-1.0.13
 
