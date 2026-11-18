@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.5
+Current version: 1.0.6
 
-Release tag: v-1.0.5
+Release tag: v-1.0.6
 
-Changelog label: v 1.0.5
+Changelog label: v 1.0.6
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.6
+
+### [v 1.0.6] 2026-11-18 - Preserve deployment secrets and validate Platform handoff
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.6.
+- Use Compose raw environment files to preserve secret dollars, quotes, hashes, spaces and empty values; require Compose 2.30+. Validate Platform SA/admin/user handoff before provisioning. All 46 tests passed, including actual Docker environment inspection; no database migration.
 
 ## v-1.0.5
 

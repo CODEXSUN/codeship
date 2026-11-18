@@ -372,3 +372,8 @@ Operate local Docker deployments and regular updates across workspace apps, with
 ## 2026-11-18 — Hermetic release verification
 
 - GitHub v-1.0.4 failed before image publication because operations tests required ignored local target settings. Tests now use temporary profiles, inert scripts and isolated SQLite with injected resolvers. Typecheck and all 43 tests passed. Prepared v-1.0.5; prior failed tags retained and no unverified container deployed.
+
+
+## 2026-11-18 — Audited deployment handoff and literal secrets
+
+- Corrected Platform registry handoff to provide all three fixed user roles and validate before provisioning. Compose runtime files now use raw format; Node migration helpers retain separate dotenv parsing. An unstarted isolated Docker fixture proved literal dollars, mixed quotes, hashes, leading/trailing spaces and empty values survive. All 46 tests passed. Prepared v-1.0.6; earlier verified images remain available, with no app replacement yet.

@@ -14,6 +14,7 @@ import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 import {migrationDecision} from '../policy.mjs';
 import {validateManifest,legacyMigrationMap,compatibleMigrationHistory} from '../release-policy.mjs';
 import {resolveReleaseImage} from '../release-image.mjs';
+import {rawEnvironment,requireRawCompose} from '../raw-environment.mjs';
 
 if(process.env.CODESHIP_DEVKIT_SCRIPT_ENTRY!=='1')throw new Error('Run the reviewed setup.sh, update.sh or verify.sh entry point.');
 const [mode,target='all',...extra]=process.argv.slice(2);
@@ -60,6 +61,7 @@ try{
  if(mode==='verify'){await verify();await stage('verification','passed');}
  else{
   if(docker(['info','--format','{{.OSType}}'])!=='linux')throw new Error('Linux Docker required.');
+  requireRawCompose(docker(['compose','version','--short']));
   const legacyState=existsSync(path.join(appRoot,'.codeship/docker/codeship.env.release.json'))?await jsonFile(path.join(appRoot,'.codeship/docker/codeship.env.release.json')):undefined;
   if(!prior&&!legacyState)throw new Error('Existing reviewed CodeShip deployment is required for group adoption.');
   if(mode==='update'&&!prior)throw new Error('Run setup.sh once to adopt the Devkits group.');
@@ -102,8 +104,10 @@ try{
   const adminConfig={host:'127.0.0.1',port:pgRecord.port??5433,database:'postgres',user:pgRecord.username,password:pgSecrets.password,connectionTimeoutMillis:5000};
   const codeitzEnvFile=path.join(privateRoot,'codeitz.env');
   const uiuxEnvFile=path.join(privateRoot,'uiux.env');
+  const uiuxComposeEnv=path.join(privateRoot,'uiux.compose.env'),codeitzComposeEnv=path.join(privateRoot,'codeitz.compose.env');
   for(const key of Object.keys(settings.uiux))if(isProtectedEnvironmentKey(key))delete settings.uiux[key];
   await writeFile(uiuxEnvFile,serializeDeploymentEnvironment(settings.uiux),{mode:0o600});
+  await writeFile(uiuxComposeEnv,rawEnvironment(settings.uiux),{mode:0o600});
   if(selected.includes('codeitz')){
    let savedEnv:Record<string,string>={};if(existsSync(codeitzEnvFile)){const {parseEnv}=await import('node:util');savedEnv=parseEnv(await readFile(codeitzEnvFile,'utf8'));}
    const password=(sourceRows.codeitz?.environment==='local-docker'?settings.codeitz.PGPASSWORD:undefined)??savedEnv.PGPASSWORD??randomBytes(32).toString('base64url');
@@ -173,11 +177,12 @@ try{
   await stage('registry','passed');
   const bind=(source:string,target:string,read_only=true)=>({type:'bind',source,target,read_only});
   const service=(name:typeof names[number])=>({image:images[name].image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:[`127.0.0.1:${ports[name]}:${internal[name]}`],stop_grace_period:'45s',healthcheck:{test:['CMD','node','-e',`fetch('http://127.0.0.1:${internal[name]}/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))`],interval:'5s',timeout:'4s',start_period:'20s',retries:30}});
+  if(images.codeitz){const {parseEnv}=await import('node:util');await writeFile(codeitzComposeEnv,rawEnvironment(parseEnv(await readFile(codeitzEnvFile,'utf8'))),{mode:0o600});}
   const services:Record<string,any>={
    codeship:{...service('codeship'),environment:{NODE_ENV:'production',CODESHIP_HOST:'0.0.0.0',CODESHIP_PORT:'4350',CODESHIP_BIND_MODE:'docker-direct',CODESHIP_DOCKER_PEERS:peers,CODESHIP_DEPLOYMENT_PROJECT:'devkits',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_METRICS_FILE:'/metrics/snapshot.json',CODESHIP_SQLITE_FILE:'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:'/keys/vault.key'},volumes:['codeship_data:/data','codeship_keys:/keys',bind(path.join(appRoot,'.codeship/metrics'),'/metrics'),bind(path.join(appRoot,'.container/targets.empty.json'),'/opt/codebiz/devkit/codeship/.codeship/targets.json')]},
   };
-  if(images.codeitz)services.codeitz={...service('codeitz'),env_file:[codeitzEnvFile],environment:{NODE_ENV:'production',CODEITZ_HOST:'0.0.0.0',CODEITZ_PORT:'4305',CODEITZ_BIND_MODE:'docker-direct',CODEITZ_DOCKER_PEERS:[peers,infraPeers].filter(Boolean).join(','),CODEITZ_WORKSPACE_ROOT:'/workspace'},command:['node','/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts'],volumes:['workspace:/workspace','codeitz_state:/opt/codebiz/devkit/codeitz/.codeitz','codeitz_codex:/home/node/.codex',bind(path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-start.ts'),'/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts')],networks:['default','infra']};
-  if(images.uiux)services.uiux={...service('uiux'),env_file:[uiuxEnvFile],environment:{NODE_ENV:'production',UIUX_HOST:'0.0.0.0',UIUX_PORT:'4315',UIUX_BIND_MODE:'docker-direct',UIUX_DOCKER_PEERS:peers},command:['node','src/api/server.ts']};
+  if(images.codeitz)services.codeitz={...service('codeitz'),env_file:[{path:codeitzComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',CODEITZ_HOST:'0.0.0.0',CODEITZ_PORT:'4305',CODEITZ_BIND_MODE:'docker-direct',CODEITZ_DOCKER_PEERS:[peers,infraPeers].filter(Boolean).join(','),CODEITZ_WORKSPACE_ROOT:'/workspace'},command:['node','/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts'],volumes:['workspace:/workspace','codeitz_state:/opt/codebiz/devkit/codeitz/.codeitz','codeitz_codex:/home/node/.codex',bind(path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-start.ts'),'/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts')],networks:['default','infra']};
+  if(images.uiux)services.uiux={...service('uiux'),env_file:[{path:uiuxComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',UIUX_HOST:'0.0.0.0',UIUX_PORT:'4315',UIUX_BIND_MODE:'docker-direct',UIUX_DOCKER_PEERS:peers},command:['node','src/api/server.ts']};
   const definition={name:'devkits',services,volumes:{codeship_data:{external:true,name:'codeship_data'},codeship_keys:{external:true,name:'codeship_keys'},workspace:{external:true,name:'codeitz-docker-local_workspace'},codeitz_state:{},codeitz_codex:{}},networks:{default:{external:true,name:'devkits_default'},infra:{external:true,name:'codebiz-infra_default'}}};
   await save(composeFile,definition);docker(['compose','-p','devkits','-f',composeFile,'config','--quiet']);
   await stage('replacement','started');

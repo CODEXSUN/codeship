@@ -12,6 +12,8 @@ import {serializeDeploymentEnvironment} from '../../src/api/modules/master/appli
 import {currentEnvironment} from '../../src/api/modules/master/application/environment.ts';
 import {validateManifest} from '../release-policy.mjs';
 import {resolveReleaseImage} from '../release-image.mjs';
+import {rawEnvironment,requireRawCompose} from '../raw-environment.mjs';
+import {platformRegistration} from './platform-registration.ts';
 import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 const [mode,name,...args]=process.argv.slice(2);
@@ -37,6 +39,7 @@ try {
  if(mode==='verify'){await verify(prior?.image);await stage('verification','passed');}
  else {
   if(mode==='setup'&&prior)throw new Error('Platform is installed; use update.sh.');if(mode==='update'&&!prior)throw new Error('Install Platform first.');
+  requireRawCompose(docker(['compose','version','--short']));
   if(!prior){if(docker(['ps','-aq','--filter','name=^/platform$']))throw new Error('Platform name is occupied.');await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(4453,'127.0.0.1',()=>probe.close(()=>resolve()));});}
   const set=JSON.parse(await readFile(path.resolve(args[1]),'utf8')),manifest=set.services?.platform;
   if(set.schema!==1||set.source!=='github'||!manifest)throw new Error('Approved Platform release missing.');
@@ -57,6 +60,7 @@ try {
   try{
    if(!existsSync(markerFile)){
     const source=parseEnv(await readFile(path.join(workspaceRoot,'apps/platform/.env'),'utf8'));
+    platformRegistration(source,manifest.version); // Validate registry fields before any target provisioning.
     const masterURL=source.PLATFORM_MASTER_DATABASE_URL;if(!masterURL)throw new Error('Native Platform database configuration missing.');
     const native=new pg.Client({connectionString:masterURL,connectionTimeoutMillis:5000});await native.connect();
     let registrations:any[];try{registrations=(await native.query('SELECT DISTINCT database_name,connection_secret_ref FROM public.tenant_databases WHERE active')).rows;}finally{await native.end();}
@@ -87,7 +91,6 @@ try {
   }finally{await admin.end();}
   if(!env.PLATFORM_MASTER_DATABASE_URL)throw new Error('Saved Platform settings missing.');
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
-  const tool=(command:string[])=>docker(['run','--rm','--network','codebiz-infra_default','--env-file',envFile,'--entrypoint','node',manifest.image,...command]);
   // Load env through Node's parser: Docker --env-file does not unquote dotenv values.
   const dbTool=(command:string)=>docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/release-database.ts',command]);
   const plans=JSON.parse(dbTool('plan')),current:Record<string,string>={};
@@ -100,9 +103,10 @@ try {
    dbTool('migrate');await stage('migration','passed');
   }else await stage('migration','skipped',{reason:'No pending master or tenant migrations; image-only update'});
   const network=JSON.parse(docker(['network','inspect','codebiz-infra_default']))[0],peers=network.IPAM.Config.map((row:any)=>row.Gateway).filter(Boolean).join(',');
-  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[envFile],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'1',PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
+  const composeEnvFile=path.join(privateRoot,'compose.env');await writeFile(composeEnvFile,rawEnvironment(env),{mode:0o600});
+  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:4453:4385'],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:'4453',PLATFORM_WEB_ORIGIN:'http://127.0.0.1:4453',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:'1',PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
   await save(composeFile,definition);docker(['compose','-p','applications','-f',composeFile,'config','--quiet']);
-  const payload=JSON.stringify([{name:'Platform',owner:'apps/platform',project:'applications',environment:'local-docker',host:'127.0.0.1',port:4453,version:manifest.version,username:'',notes:'CodeShip-managed tagged local Docker release; independent database copy',users:[],secrets:{env:serializeDeploymentEnvironment(env)}}]);
+  const payload=JSON.stringify([platformRegistration(env,manifest.version)]);
   execute(process.execPath,['scripts/register-devkits.ts'],payload);
   const state=JSON.parse(await readFile(path.join(appRoot,'.codeship/devkits/state.json'),'utf8'));
   docker(['run','--rm','-i','--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','--mount','type=volume,source=codeship_data,target=/data','--mount','type=volume,source=codeship_keys,target=/keys',state.services.codeship.image,'node','scripts/register-devkits.ts'],payload);
