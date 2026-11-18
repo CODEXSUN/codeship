@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.6
+Current version: 1.0.7
 
-Release tag: v-1.0.6
+Release tag: v-1.0.7
 
-Changelog label: v 1.0.6
+Changelog label: v 1.0.7
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.7
+
+### [v 1.0.7] 2026-11-18 - Isolate Platform databases without adopting existing data
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.7.
+- Assign stable isolated Platform database names and a dedicated non-superuser service role. Save encrypted recovery settings before provisioning and update tenant routing only inside the copied master database. Existing target database collisions remain protected. All 48 tests passed; no new schema migration.
 
 ## v-1.0.6
 

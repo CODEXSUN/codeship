@@ -14,6 +14,7 @@ import {validateManifest} from '../release-policy.mjs';
 import {resolveReleaseImage} from '../release-image.mjs';
 import {rawEnvironment,requireRawCompose} from '../raw-environment.mjs';
 import {platformRegistration} from './platform-registration.ts';
+import {platformDatabaseScopes,platformDatabaseRole} from './platform-databases.mjs';
 import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 const [mode,name,...args]=process.argv.slice(2);
@@ -64,29 +65,38 @@ try {
     const masterURL=source.PLATFORM_MASTER_DATABASE_URL;if(!masterURL)throw new Error('Native Platform database configuration missing.');
     const native=new pg.Client({connectionString:masterURL,connectionTimeoutMillis:5000});await native.connect();
     let registrations:any[];try{registrations=(await native.query('SELECT DISTINCT database_name,connection_secret_ref FROM public.tenant_databases WHERE active')).rows;}finally{await native.end();}
-    const scopes=[{key:'PLATFORM_MASTER_DATABASE_URL',name:'cx_master_db',source:masterURL},...registrations.map(row=>{if(!/^env:PLATFORM_TENANT(?:_[A-Z0-9]+)*_DATABASE_URL$/.test(row.connection_secret_ref))throw new Error('Unsupported tenant connection reference.');const value=source[row.connection_secret_ref.slice(4)];if(!value||new URL(value).pathname!=='/'+row.database_name)throw new Error('Missing native tenant connection.');return {key:row.connection_secret_ref.slice(4),name:row.database_name,source:value};})];
+    const scopes=platformDatabaseScopes(source,registrations);
     if(new Set(scopes.map(scope=>scope.name)).size!==scopes.length||scopes.some(scope=>!/^[_a-z][_a-z0-9]{0,62}$/.test(scope.name)))throw new Error('Ambiguous database copy scope.');
     for(const scope of scopes)if((await admin.query('SELECT 1 FROM pg_database WHERE datname=$1',[scope.name])).rowCount)throw new Error('Platform target database exists without an import record; inspect before adoption.');
     const password=randomBytes(32).toString('base64url');
-    if((await admin.query("SELECT 1 FROM pg_roles WHERE rolname='platform'")).rowCount)throw new Error('Platform role exists without an import record.');
-    await admin.query(`CREATE ROLE platform LOGIN PASSWORD '${password}'`);
+    if((await admin.query('SELECT 1 FROM pg_roles WHERE rolname=$1',[platformDatabaseRole])).rowCount)throw new Error('Platform service role exists without an import record.');
     env={...source};for(const key of Object.keys(env))if(key.startsWith('PLATFORM_DEV_'))env[key]='0';
+    env.NODE_ENV='production';env.PLATFORM_BIND_MODE='docker-direct';env.PLATFORM_REQUIRE_PASSWORD_CHANGE='1';env.PLATFORM_GATEWAY_ENABLED='0';
+    for(const scope of scopes){const target=new URL(scope.source);target.hostname='postgres';target.port='5432';target.pathname='/'+scope.name;target.username=platformDatabaseRole;target.password=password;target.search='?sslmode=disable';env[scope.key]=target.href;}
+    // Retain encrypted recovery settings before any role/database effects.
+    await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
+    const prepared=platformRegistration(env,manifest.version);prepared.notes='CodeShip prepared Platform install; database copy and runtime verification pending.';
+    execute(process.execPath,['scripts/register-devkits.ts'],JSON.stringify([prepared]));await stage('install-settings','passed',{encryptedRegistry:true});
+    await admin.query(`CREATE ROLE ${platformDatabaseRole} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE`);
     const backups=[];
     for(const scope of scopes){
      await stage('copy-'+scope.name,'started');const dump=path.join(privateRoot,scope.name+'-initial-'+run+'.dump');
      execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',dump],undefined,connectionEnv(scope.source));
      execute(path.join(bin,'pg_restore'),['--list',dump]);
-     await admin.query('CREATE DATABASE "'+scope.name+'" OWNER platform');
-     const target=new URL(scope.source);target.hostname='127.0.0.1';target.port=String(adminConfig.port);target.username='platform';target.password=password;target.search='?sslmode=disable';
+     await admin.query('CREATE DATABASE "'+scope.name+'" OWNER '+platformDatabaseRole);await admin.query('REVOKE ALL ON DATABASE "'+scope.name+'" FROM PUBLIC');
+     const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);
      execute(path.join(bin,'pg_restore'),['--single-transaction','--exit-on-error','--no-owner','--no-privileges','--dbname='+scope.name,dump],undefined,connectionEnv(target.href));
      // Compare every base-table count and stable identity digest without logging data.
      const original=new pg.Client({connectionString:scope.source}),copy=new pg.Client({connectionString:target.href});await original.connect();await copy.connect();
      try{const tables=(await original.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows;for(const {tablename} of tables){const quoted='"'+tablename.replaceAll('"','""')+'"';const a=await original.query('SELECT count(*)::text AS n FROM public.'+quoted),b=await copy.query('SELECT count(*)::text AS n FROM public.'+quoted);if(a.rows[0].n!==b.rows[0].n)throw new Error('Native data changed during copy; inspect the retained copy before proceeding.');}const identities=(await original.query("SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='public_id' ORDER BY table_name")).rows;for(const {table_name}of identities){const quoted='"'+table_name.replaceAll('"','""')+'"',query='SELECT public_id FROM public.'+quoted+' ORDER BY public_id';if(JSON.stringify((await original.query(query)).rows)!==JSON.stringify((await copy.query(query)).rows))throw new Error('Copied identity verification failed.');}}finally{await original.end();await copy.end();}
      target.hostname='postgres';target.port='5432';env[scope.key]=target.href;backups.push({database:scope.name,key:scope.key,dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});await stage('copy-'+scope.name,'passed');
     }
-    env.NODE_ENV='production';env.PLATFORM_REQUIRE_PASSWORD_CHANGE='1';env.PLATFORM_GATEWAY_ENABLED='0';
+    // Only the copied master registry points at isolated tenant names. Native rows stay unchanged.
+    const copiedURL=new URL(env.PLATFORM_MASTER_DATABASE_URL);copiedURL.hostname='127.0.0.1';copiedURL.port=String(adminConfig.port);
+    const copiedMaster=new pg.Client({connectionString:copiedURL.href});await copiedMaster.connect();
+    try{await copiedMaster.query('BEGIN');for(const scope of scopes.filter(scope=>scope.key!=='PLATFORM_MASTER_DATABASE_URL')){const changed=await copiedMaster.query("UPDATE public.tenant_databases SET database_name=$1,deployment_key='platform-docker',updated_by='system:codeship-copy' WHERE database_name=$2 AND connection_secret_ref=$3",[scope.name,scope.sourceName,'env:'+scope.key]);if(changed.rowCount!==1)throw new Error('Copied tenant routing was not unique.');}await copiedMaster.query('COMMIT');}catch(error){await copiedMaster.query('ROLLBACK');throw error;}finally{await copiedMaster.end();}
     await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
-    await save(markerFile,{status:'imported',scopes:backups});
+    await save(markerFile,{status:'imported',role:platformDatabaseRole,scopes:backups});
    }else if(!Object.keys(env).length){env=parseEnv(await readFile(envFile,'utf8'));}
   }finally{await admin.end();}
   if(!env.PLATFORM_MASTER_DATABASE_URL)throw new Error('Saved Platform settings missing.');

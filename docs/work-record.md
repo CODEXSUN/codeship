@@ -1,5 +1,11 @@
 # Work Record
 
+## 2026-11-18 — Automation local database preparation
+
+- Added scripts/prepare-automation-database.ts as a fixed native-development operator command. Preview is read-only; --apply refuses pre-existing Automation development inventory/databases/role and never rotates or drops them.
+- Executed the authorized preparation for apps/automation: created automation_local and automation_local_test with a dedicated non-superuser role, saved recovery credentials in the encrypted application inventory before effects and wrote ignored app environment values without printing them.
+- Automation authenticated, applied its owned migration and passed real database queue tests. CodeShip typecheck passed with the new preparation command. Existing infrastructure runtime, bindings, volumes, application databases and unrelated pending CodeShip changes were preserved. This is native database setup, not application image deployment or a new CodeShip release.
+
 ## Goal
 
 Operate local Docker deployments and regular updates across workspace apps, with durable history and monitoring. Local remains development; a future VPS adapter will serve production.
@@ -377,3 +383,10 @@ Operate local Docker deployments and regular updates across workspace apps, with
 ## 2026-11-18 — Audited deployment handoff and literal secrets
 
 - Corrected Platform registry handoff to provide all three fixed user roles and validate before provisioning. Compose runtime files now use raw format; Node migration helpers retain separate dotenv parsing. An unstarted isolated Docker fixture proved literal dollars, mixed quotes, hashes, leading/trailing spaces and empty values survive. All 46 tests passed. Prepared v-1.0.6; earlier verified images remain available, with no app replacement yet.
+
+
+## 2026-11-18 — Isolated Platform database targets
+
+- Devkits v-1.0.6/v-1.0.5/v-0.1.6 deployed and verified; CodeShip SQLite and all 11 Codeitz project IDs/owners matched the pre-update baseline. No migrations were pending.
+- Platform v-1.0.3 setup stopped before writes because infrastructure PostgreSQL already contained cx_master_db. The existing database and native source were preserved.
+- The adapter now targets platform_master and platform_codexsun under platform_service, saves encrypted recovery credentials before effects and changes routing only in the cloned master. All 48 tests passed. The corresponding Platform target validation is prepared in an isolated source checkout to preserve ongoing native-admission edits.
