@@ -7,3 +7,5 @@ Automation uses the private `applications_backend` Redis alias. Only its namespa
 The runtime wrapper selects Automation's owned supervisor and allows a bounded drain period; other products retain their existing entry and timeout. Product readiness includes a fresh worker heartbeat and Redis availability, so the existing CodeShip verification gate also checks the managed worker. The application update remains a tagged image operation with existing migration planning, writer quiescence, backup and recovery stages.
 
 Only the Automation-related container adapters belong to this change. Concurrent native registry/database/UI edits are not included in its source publication or application release set.
+
+Compatibility: when a legacy Platform candidate has no optional configure-local-entry.ts script, preserve its private entry settings and record that optional stage as skipped. Do not mix unrelated pending Platform entry features into a focused authorization patch. Existing deployed entry behavior and image/data identity still require the ordinary readiness/origin checks.

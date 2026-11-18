@@ -24,11 +24,11 @@ export async function prepareAutomationRedis(env:Record<string,string>, docker:(
   const aclFile=await realpath(source),allowed=await realpath(path.join(appRoot,'.codeship'));
   if(!aclFile.startsWith(allowed+path.sep))throw Error('Redis ACL source is outside CodeShip private storage.');
   const existing=await readFile(aclFile,'utf8');
-  const restrictions=['+@all','-acl','-config','-flushall','-flushdb','-shutdown','-module','-debug','-replicaof','-slaveof'];
+  const restrictions=['+@all','-acl','-config','-flushall','-flushdb','-shutdown','-module','-debug','-replicaof','-slaveof','-save','-bgsave','-bgrewriteaof','-swapdb','-migrate','-restore','-keys','-scan','-randomkey','-dbsize','-function'];
   const line=`user ${username} on #${createHash('sha256').update(password).digest('hex')} ~codebiz:${namespace}:* &codebiz:${namespace}:* ${restrictions.join(' ')}`;
   await writeFile(aclFile,existing.split(/\r?\n/).filter(row=>row&&!row.startsWith('user '+username+' ')).concat(line,'').join('\n'),{mode:0o600});
   const resp=(args:string[])=>'*'+args.length+'\r\n'+args.map(v=>'$'+Buffer.byteLength(v)+'\r\n'+v+'\r\n').join('');
-  const payload=resp(['AUTH',admin])+resp(['ACL','SETUSER',username,'on','>'+password,'resetkeys','~codebiz:'+namespace+':*','resetchannels','&codebiz:'+namespace+':*','+@all','-acl','-config','-flushall','-flushdb','-shutdown','-module','-debug','-replicaof','-slaveof']);
+  const payload=resp(['AUTH',admin])+resp(['ACL','SETUSER',username,'on','>'+password,'resetkeys','~codebiz:'+namespace+':*','resetchannels','&codebiz:'+namespace+':*',...restrictions]);
   const result=docker(['exec','-i','codebiz-infra-redis-1','redis-cli','--pipe'],payload);
   if(!/errors: 0/.test(result))throw Error('Scoped Redis account preparation failed.');
   const network=JSON.parse(docker(['network','inspect','applications_backend']))[0];
