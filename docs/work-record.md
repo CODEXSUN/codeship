@@ -442,3 +442,7 @@ CodeShip 1.0.13 deployed successfully on 14350:4350; registry writer locking, re
 Prepared 1.0.14 to scope registry payloads, environment rendering and workspace initialization to the selected service. A pre-write invariant rejects unselected/duplicate registry owners. The new regression verifies group-wide payload rejection; combined checks and final deployment follow. Unrelated owner changes remain outside this isolated release.
 
 - Final source audit: typecheck/build/version checks and all 63 tests passed. Native/Docker Codeitz/UIUX environments match; Codeitz's existing running credential/sync settings match the saved values. Registry Codeitz port is restored to 14305. No credential values were printed. Release/build and post-deployment preservation checks follow.
+
+## 2026-11-18 — Platform-only 14385 publication adapter
+
+User authorized Platform publication/update and 14385:4385 binding from the Platform chat. Isolated this host adapter from unrelated shared Billing/Texlinks/runtime-helper edits and preserved incoming CodeShip selected-service/security fixes. Probe changed port, preserve all unselected definitions, update registry/origin, use installed metrics origin, replace only Platform and compare sibling identities. Password policy is version-aware: legacy <=1.0.6 remains compatible; >=1.0.7 uses the confirmed no-forced-change policy. No CodeShip container deployment or database migration is part of this commit. Focused port/network tests and direct script syntax checks pass; deployment outcome is recorded by the Platform task.

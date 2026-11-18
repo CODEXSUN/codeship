@@ -1,3 +1,4 @@
+import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
 import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
@@ -46,7 +47,7 @@ async function verify(image:string){
  const facts=JSON.parse(docker(['inspect',name,'--format','{"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":{{json .NetworkSettings.Networks}},"ports":{{json .HostConfig.PortBindings}}}']));
  verifyIndependentContainer(name,facts);
  if(facts.project!=='applications'||facts.health!=='healthy'||facts.image!==docker(['image','inspect',image,'--format','{{.Id}}']))throw Error('Application image or health identity mismatch.');
- await ensureMetricsCollector();for(let attempt=0;attempt<40;attempt++){const report=await(await fetch('http://127.0.0.1:14350/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service===name))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
+ await ensureMetricsCollector();for(let attempt=0;attempt<40;attempt++){const report=await(await fetch(installedCodeshipOrigin(appRoot)+'/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service===name))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
 }
 async function registry(env:Record<string,string>,version:string,verified=false){
  const serialized=serializeDeploymentEnvironment(env);
@@ -62,7 +63,7 @@ try{
   if(mode==='setup'&&prior)throw Error('Application is installed; use update.');if(mode==='update'&&!prior)throw Error('Install the application first.');
   const platformDefinition=JSON.parse(await readFile(composeFile,'utf8'));
   if(platformDefinition.services?.platform?.network_mode||!platformDefinition.services?.platform?.networks?.backend)throw Error('Update Platform to the independent-container network before installing applications.');
-  await requireReady(4453,'Platform');
+  await requireReady(platformTarget.port,'Platform');
   if(prior){const recovery=path.join(privateRoot,'recovery',run);await mkdir(recovery,{recursive:true,mode:0o700});for(const file of [composeFile,envFile,path.join(privateRoot,'compose.env'),stateFile])if(existsSync(file))await copyFile(file,path.join(recovery,path.basename(file)));await stage('previous-configuration','retained',{directory:recovery});}
   requireRawCompose(docker(['compose','version','--short']));
   if(!prior&&docker(['ps','-aq','--filter','name=^/'+name+'$']))throw Error('Application container name is occupied.');

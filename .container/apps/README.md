@@ -70,3 +70,5 @@ sh .container/apps/verify.sh billing
 
 Do not run a later dependent stage after a failed prerequisite. Keep the partial
 state and stage log for recovery. Infrastructure engine updates are separate.
+
+Platform now publishes only loopback 14385:4385. Its update probes a changed port before effects, preserves every unselected service definition/volume/network, replaces only Platform with --no-deps, and verifies sibling container identities. Installed CodeShip metrics binding is resolved from Compose so a separate CodeShip port migration is supported. Platform >=1.0.7 follows the confirmed optional password-change policy; legacy images retain their strict startup flag.

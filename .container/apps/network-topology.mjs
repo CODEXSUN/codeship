@@ -1,3 +1,4 @@
+import {platformTarget} from './platform-target.mjs';
 import {businessTargets} from './business-targets.mjs';
 export const applicationNetwork='applications_backend';
 export function applicationAddresses(subnet){
@@ -29,12 +30,12 @@ export function applyIndependentNetwork(service,name,topology){
  if(!Object.hasOwn(topology.addresses,name))throw Error('Unregistered application network target.');
  delete service.network_mode;delete service.depends_on;
  service.networks={backend:{ipv4_address:topology.addresses[name]}};
- const target=businessTargets[name];service.ports=[name==='platform'?'127.0.0.1:4453:4385':'127.0.0.1:'+target.port+':'+target.relayPort];
+ const target=businessTargets[name];service.ports=[name==='platform'?'127.0.0.1:'+platformTarget.port+':'+platformTarget.apiPort:'127.0.0.1:'+target.port+':'+target.relayPort];
  return service;
 }
 export function verifyIndependentContainer(name,facts){
  const target=businessTargets[name];if(name!=='platform'&&!target)throw Error('Unknown container identity.');
- const containerPort=name==='platform'?4385:target.relayPort,hostPort=name==='platform'?4453:target.port;
+ const containerPort=name==='platform'?platformTarget.apiPort:target.relayPort,hostPort=name==='platform'?platformTarget.port:target.port;
  if(/^(host|container:|service:)/.test(facts.networkMode??'')||Object.keys(facts.networks??{}).length!==1||!facts.networks[applicationNetwork]?.IPAddress)throw Error('Application must own an independent private network endpoint.');
  const ports=Object.entries(facts.ports??{});
  if(ports.length!==1||ports[0][0]!==containerPort+'/tcp'||ports[0][1]?.length!==1||ports[0][1][0].HostIp!=='127.0.0.1'||ports[0][1][0].HostPort!==String(hostPort))throw Error('Application must publish only its own loopback port.');
