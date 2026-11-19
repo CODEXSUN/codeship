@@ -1,0 +1,18 @@
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {Button} from '@workspace/ui';
+import {Card} from '@workspace/ui/components/card';
+import {ScrollArea} from '@workspace/ui/components/scroll-area';
+import {Copy,Pause,Play,RefreshCw} from 'lucide-react';
+import type {MetricCategory} from '../../../../contracts/docker-metrics';
+import type {ContainerLogReport} from '../../../../contracts/container-logs';
+export function ContainerLogs({category,containerId}:{category:MetricCategory;containerId:string}){
+ const [report,setReport]=useState<ContainerLogReport>(),[error,setError]=useState(''),[live,setLive]=useState(true),[busy,setBusy]=useState(false),[following,setFollowing]=useState(true),[copied,setCopied]=useState(false);const area=useRef<HTMLDivElement>(null);
+ const load=useCallback(async(signal?:AbortSignal)=>{setBusy(true);try{const response=await fetch('/api/v1/docker-metrics/'+category+'/'+containerId+'/logs',{signal,cache:'no-store'});if(!response.ok)throw Error('Container logs could not be loaded.');const next=await response.json();if(!signal?.aborted){setReport(next);setError('');}}catch(cause){if(!signal?.aborted)setError(cause instanceof Error?cause.message:'Container logs unavailable.');}finally{if(!signal?.aborted)setBusy(false);}},[category,containerId]);
+ useEffect(()=>{setReport(undefined);setFollowing(true);const controller=new AbortController();void load(controller.signal);return()=>controller.abort();},[load]);
+ useEffect(()=>{if(!live)return;const controller=new AbortController();const timer=setInterval(()=>void load(controller.signal),3000);return()=>{controller.abort();clearInterval(timer);};},[load,live]);
+ useEffect(()=>setCopied(false),[report?.text]);
+ useEffect(()=>{if(following){const viewport=area.current?.querySelector('[data-radix-scroll-area-viewport]');if(viewport)viewport.scrollTop=viewport.scrollHeight;}},[report?.text,following]);
+ return <Card size="sm" title="Container logs" description={error||(!report?'Connecting…':report.name+' · '+(!report.available?'Waiting for the host log collector.':(live?'Live':'Paused')+' · Last '+report.tail+' lines · '+new Date(report.collectedAt).toLocaleTimeString()))} action={<div className="flex items-center gap-1"><Button variant="ghost" size="sm" aria-label={live?'Pause live logs':'Resume live logs'} title={live?'Pause live logs':'Resume live logs'} onClick={()=>setLive(value=>!value)}>{live?<Pause className="size-3.5"/>:<Play className="size-3.5"/>}</Button><Button variant="ghost" size="sm" aria-label="Refresh container logs" title="Refresh logs" disabled={busy} onClick={()=>void load()}><RefreshCw className="size-3.5"/></Button><Button variant="ghost" size="sm" aria-label={copied?'Logs copied':'Copy container logs'} title={copied?'Copied':'Copy logs'} disabled={!!error||!report?.available||!report.text} onClick={()=>{void navigator.clipboard.writeText(report?.text??'').then(()=>setCopied(true)).catch(()=>setError('Copy unavailable; select the log text to copy.'));}}><Copy className="size-3.5"/></Button></div>}>
+ <div className="relative min-w-0"><ScrollArea ref={area} className="h-72 rounded-md bg-zinc-950 text-zinc-100" onScrollCapture={event=>{const target=event.target as HTMLElement;setFollowing(target.scrollHeight-target.scrollTop-target.clientHeight<32);}}><pre aria-label="Container log output" tabIndex={0} className="m-0 whitespace-pre-wrap break-all p-3 font-mono text-[11px] leading-4">{error?'Logs unavailable.':report?.available?(report.text||'No recent log output.'):'Waiting for live logs…'}</pre></ScrollArea>{!following&&<Button variant="secondary" size="sm" className="absolute bottom-2 right-3" onClick={()=>setFollowing(true)}>Jump to latest</Button>}</div>
+ </Card>;
+}

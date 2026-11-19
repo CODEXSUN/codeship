@@ -35,3 +35,10 @@ export async function runLocal(key:string,action:Action,onLine:(line:string)=>vo
  });
 }
 export async function docker(args:string[]){const result=await execute('docker',args,{windowsHide:true,timeout:15000,maxBuffer:1024*1024});return result.stdout;}
+
+/** Docker log tail includes both stdout and stderr, ordered by Docker timestamps. */
+export async function dockerLogTail(id:string){
+ if(!/^[a-f0-9]{12,64}$/.test(id))throw Error('Invalid container ID.');
+ const result=await execute('docker',['logs','--timestamps','--tail','100',id],{windowsHide:true,timeout:15000,maxBuffer:256*1024});
+ return (result.stdout+'\n'+result.stderr).split('\n').filter(Boolean).sort((a,b)=>a.slice(0,30).localeCompare(b.slice(0,30))).join('\n');
+}
