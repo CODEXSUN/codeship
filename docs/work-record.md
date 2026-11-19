@@ -524,3 +524,7 @@ Narrow follow-up: root/Overview routes now use full available width with16px mob
 Read-only aggregate pool inventory recorded in docs/postgres-pool-inventory.md. Retained release source indicates nominal99 PostgreSQL connections per one-process service set (business apps40, Codeitz25, Platform34 default), before migration/native/worker/maintenance demand. Effective live process counts/reserved slots and full budget remain unverified; owner review required, no pool or PostgreSQL changes performed.
 
 Deployment paused: Docker Linux engine pipe disappeared; supervisor independently confirms WSL stopped and requested no retries/restarts/lock clearing while awaiting user direction. No1.0.21 release set, migration or container update started.1.0.20 deployment evidence remains historical; current live health is not claimed. Publication and tagged CI recorded separately when verified. Existing unrelated primary checkout work preserved.
+
+### 2026-11-19 original shared Platform login
+
+Prepared from approved clean release; unfinished owner folders preserved. Reuse WorkspaceAccessGate and SDK0.1.8/ad91f8ecc3c788984a276e1fe88f02d013739d7e, actual session user/logout, exact origins/peers and authoritative current permissions. Auth opt-in protects every app-owned API including metric/log feeds without routing streams through the JSON gateway. Typecheck/build and 80 existing tests passed. No migrations, custom auth screen/cookie, Cloudflare edits or deployments claimed. Matching local/VPS verification pending Platform installation.

@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.21
+Current version: 1.0.22
 
-Release tag: v-1.0.21
+Release tag: v-1.0.22
 
-Changelog label: v 1.0.21
+Changelog label: v 1.0.22
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.22
+
+### [v 1.0.22] 2026-11-19 - Use the original shared Platform login on approved Docker domains
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.22.
+- Reuse the original shared WorkspaceAccessGate and Platform session client. Protect app-owned APIs through authoritative tenant/service/permission checks while preserving direct API paths and existing private defaults. Add explicit browser origin and actual Docker peer configuration. No database migration.
 
 ## v-1.0.21
 

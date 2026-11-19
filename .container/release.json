@@ -17,6 +17,12 @@
       "repository": "CODEXSUN/ui",
       "commit": "e88945f101313051ded3557e14b0363a0a6ca906",
       "sshSecret": "RELEASE_UI_KEY"
+    },
+    {
+      "path": "packages/sdk",
+      "repository": "CODEXSUN/sdk",
+      "commit": "ad91f8ecc3c788984a276e1fe88f02d013739d7e",
+      "sshSecret": "RELEASE_SDK_KEY"
     }
   ]
 }

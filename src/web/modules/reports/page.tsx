@@ -1,3 +1,4 @@
+import {appFetch} from '../../platform-client';
 import {ContainerLogs} from './container-logs';
 import {useEffect,useState,useCallback,type ReactNode} from 'react';
 import {Button,Badge} from '@workspace/ui';
@@ -16,7 +17,7 @@ const size=(bytes:number|null)=>bytes===null?'—':bytes>=1073741824?(bytes/1073
 export function DockerMetricsPage({category,onHeaderActionsChange,path,navigate,infrastructure,rootPath,applications}:{rootPath?:string;applications?:ManagedApplication[];infrastructure?:InfrastructureService[];category:MetricCategory;path:string;navigate:(path:string)=>void;onHeaderActionsChange:(path:string,node:ReactNode)=>void}){
  const [samples,setSamples]=useState<MetricSamples>({});
  const [data,setData]=useState<DockerMetricReport>(),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- const load=useCallback(async(signal?:AbortSignal)=>{setBusy(true);try{const response=await fetch('/api/v1/docker-metrics/'+category,{signal,cache:'no-store'});if(!response.ok)throw new Error('Docker metrics could not be loaded.');const next=await response.json();if(!signal?.aborted){setData(next);setSamples(previous=>appendMetricSamples(previous,next));setError('');}}catch(cause){if(!signal?.aborted)setError(cause instanceof Error?cause.message:'Docker metrics unavailable.');}finally{if(!signal?.aborted)setBusy(false);}},[category]);
+ const load=useCallback(async(signal?:AbortSignal)=>{setBusy(true);try{const response=await appFetch('/api/v1/docker-metrics/'+category,{signal,cache:'no-store'});if(!response.ok)throw new Error('Docker metrics could not be loaded.');const next=await response.json();if(!signal?.aborted){setData(next);setSamples(previous=>appendMetricSamples(previous,next));setError('');}}catch(cause){if(!signal?.aborted)setError(cause instanceof Error?cause.message:'Docker metrics unavailable.');}finally{if(!signal?.aborted)setBusy(false);}},[category]);
  useEffect(()=>{setData(undefined);const controller=new AbortController();void load(controller.signal);const timer=setInterval(()=>void load(controller.signal),5000);return()=>{controller.abort();clearInterval(timer);};},[load]);
  useEffect(()=>{onHeaderActionsChange(path,<><span>{selectedId&&<Button variant="outline" onClick={()=>navigate(rootPath??path.split('/').slice(0,3).join('/'))}>Back to cards</Button>}</span><Button variant="outline" disabled={busy} onClick={()=>void load()}>{busy?'Refreshing…':'Refresh'}</Button></>);return()=>onHeaderActionsChange(path,null);},[path,busy,load,onHeaderActionsChange]);
  const selectedId=path.split('/')[3];

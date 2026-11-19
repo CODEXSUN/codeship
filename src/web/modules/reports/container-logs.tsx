@@ -1,3 +1,4 @@
+import {appFetch} from '../../platform-client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '@workspace/ui';
 import {Card} from '@workspace/ui/components/card';
@@ -7,7 +8,7 @@ import type {MetricCategory} from '../../../../contracts/docker-metrics';
 import type {ContainerLogReport} from '../../../../contracts/container-logs';
 export function ContainerLogs({category,containerId}:{category:MetricCategory;containerId:string}){
  const [report,setReport]=useState<ContainerLogReport>(),[error,setError]=useState(''),[live,setLive]=useState(true),[busy,setBusy]=useState(false),[following,setFollowing]=useState(true),[copied,setCopied]=useState(false);const area=useRef<HTMLDivElement>(null);
- const load=useCallback(async(signal?:AbortSignal)=>{setBusy(true);try{const response=await fetch('/api/v1/docker-metrics/'+category+'/'+containerId+'/logs',{signal,cache:'no-store'});if(!response.ok)throw Error('Container logs could not be loaded.');const next=await response.json();if(!signal?.aborted){setReport(next);setError('');}}catch(cause){if(!signal?.aborted)setError(cause instanceof Error?cause.message:'Container logs unavailable.');}finally{if(!signal?.aborted)setBusy(false);}},[category,containerId]);
+ const load=useCallback(async(signal?:AbortSignal)=>{setBusy(true);try{const response=await appFetch('/api/v1/docker-metrics/'+category+'/'+containerId+'/logs',{signal,cache:'no-store'});if(!response.ok)throw Error('Container logs could not be loaded.');const next=await response.json();if(!signal?.aborted){setReport(next);setError('');}}catch(cause){if(!signal?.aborted)setError(cause instanceof Error?cause.message:'Container logs unavailable.');}finally{if(!signal?.aborted)setBusy(false);}},[category,containerId]);
  useEffect(()=>{setReport(undefined);setFollowing(true);const controller=new AbortController();void load(controller.signal);return()=>controller.abort();},[load]);
  useEffect(()=>{if(!live)return;const controller=new AbortController();const timer=setInterval(()=>void load(controller.signal),3000);return()=>{controller.abort();clearInterval(timer);};},[load,live]);
  useEffect(()=>setCopied(false),[report?.text]);

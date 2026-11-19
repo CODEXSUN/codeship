@@ -1,3 +1,4 @@
+import {PlatformGate} from './platform';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { Toaster } from '@workspace/ui/components/sonner';
@@ -7,5 +8,5 @@ import { Application } from './modules/home/page';
 import '../styles/index.css';
 
 createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><DesignSystemProvider migrateToSilver storageKey={`${appDetails.name}.ui.preferences`}><Application /><Toaster /></DesignSystemProvider></React.StrictMode>,
+  <React.StrictMode><DesignSystemProvider migrateToSilver storageKey={`${appDetails.name}.ui.preferences`}><PlatformGate><Application /><Toaster /></PlatformGate></DesignSystemProvider></React.StrictMode>,
 );
