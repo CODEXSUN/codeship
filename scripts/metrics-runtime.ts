@@ -1,3 +1,4 @@
+import {isMetricsCollector} from './metrics-process.ts';
 import {spawn} from 'node:child_process';
 import {mkdir,open,readFile,unlink} from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +8,7 @@ export async function ensureMetricsCollector(){
  if(process.env.CODESHIP_EXECUTION_MODE==='inventory')return;
  const directory=path.join(appRoot,'.codeship/metrics');await mkdir(directory,{recursive:true,mode:0o700});
  const pidFile=path.join(directory,'collector.lock');
- async function running(){try{const pid=Number(await readFile(pidFile,'utf8'));if(!Number.isSafeInteger(pid)||pid<=0)return false;process.kill(pid,0);return true;}catch(error){return (error as NodeJS.ErrnoException).code==='EPERM';}}
+ async function running(){try{return await isMetricsCollector(Number(await readFile(pidFile,'utf8')));}catch{return false;}}
  if(await running())return;
  const launchFile=path.join(directory,'launcher.lock');let lock;
  try{lock=await open(launchFile,'wx',0o600);}catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')return;throw error;}
