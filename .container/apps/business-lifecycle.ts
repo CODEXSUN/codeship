@@ -1,12 +1,14 @@
 import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {dockerBrowserOrigins} from './browser-origins.mjs';
 import {prepareAbconnectDatabase,grantAbconnectRuntime} from './abconnect-database.ts';
+import {prepareIilabsDatabase,grantIilabsRuntime} from './iilabs-database.ts';
+import {requireIilabsLocalDockerTarget} from './iilabs-target.mjs';
 import {prepareCrmDatabase} from './crm-database.ts';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
 import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {existsSync,realpathSync} from 'node:fs';
 import {randomBytes,createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
 import path from 'node:path';
@@ -26,6 +28,12 @@ import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 
 const [mode,name,...args]=process.argv.slice(2),target=businessTarget(name);
+if(name==='iilabs'){
+ const context=spawnSync('docker',['context','show'],{encoding:'utf8',timeout:10000,windowsHide:true});
+ const endpoint=spawnSync('docker',['context','inspect','desktop-linux','--format','{{.Endpoints.docker.Host}}'],{encoding:'utf8',timeout:10000,windowsHide:true});
+ if(context.status!==0||endpoint.status!==0)throw Error('Cannot verify the local Docker target.');
+ requireIilabsLocalDockerTarget({platform:process.platform,appRoot,stateRoot:realpathSync(path.join(appRoot,'.codeship')),dockerContext:context.stdout.trim(),dockerEndpoint:endpoint.stdout.trim()});
+}
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||!['setup','update','verify'].includes(mode))throw Error('Use the CodeShip application shell entry.');
 const resumeSetup=mode==='setup'&&name==='abconnect'&&args.length===3&&args[2]==='--resume';
 if(mode!=='verify'&&((args.length!==2&&!resumeSetup)||args[0]!=='--release-set'))throw Error('Supply an explicit approved release set.');
@@ -59,7 +67,7 @@ async function registry(env:Record<string,string>,version:string,verified=false)
  const row=applicationInput.parse({name,owner:'apps/'+name,project:'applications',environment:'local-docker',host:'127.0.0.1',port:target.port,version,username:'',notes:verified?'CodeShip verified tagged Docker release and Platform admission; independent data':'CodeShip prepared tagged Docker release; runtime verification and Platform admission pending',users:installationUsers({env:serialized}).map(({hasPassword,...user})=>user),secrets:{env:serialized}});
  const payload=JSON.stringify([row]);execute(process.execPath,['scripts/register-devkits.ts'],payload);
  const state=JSON.parse(await readFile(path.join(appRoot,'.codeship/devkits/state.json'),'utf8'));
- docker(['run','--rm','-i','--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','--mount','type=volume,source=codeship_data,target=/data','--mount','type=volume,source=codeship_keys,target=/keys',...(name==='abconnect'?['--mount','type=bind,source='+path.join(appRoot,'.container/apps/business-targets.mjs')+',target=/opt/codebiz/devkit/codeship/.container/apps/business-targets.mjs,readonly']:[]),state.services.codeship.image,'node','scripts/register-devkits.ts'],payload);
+ docker(['run','--rm','-i','--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','--mount','type=volume,source=codeship_data,target=/data','--mount','type=volume,source=codeship_keys,target=/keys',...(['abconnect','iilabs'].includes(name)?['--mount','type=bind,source='+path.join(appRoot,'.container/apps/business-targets.mjs')+',target=/opt/codebiz/devkit/codeship/.container/apps/business-targets.mjs,readonly']:[]),state.services.codeship.image,'node','scripts/register-devkits.ts'],payload);
 }
 try{
  if(!existsSync(composeFile)||!existsSync(path.join(appRoot,'.codeship/apps/platform/state.json')))throw Error('Install and verify the approved Platform release first.');
@@ -114,7 +122,15 @@ try{
     await stage('fresh-database','passed',{nativeDataImported:false});
    }
   }
-  if(target.database&&name!=='abconnect'&&!existsSync(markerFile)){
+  if(name==='iilabs'){
+   env.IILABS_DEMO_MODE='0';env.IILABS_SYNC_ENABLED='0';
+   if(!existsSync(markerFile)){
+    await prepareIilabsDatabase(adminConfig,env,async()=>{await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);});
+    await save(markerFile,{status:'fresh-provisioned',database:target.database,runtimeRole:new URL(env.IILABS_DATABASE_URL).username,migrationRole:'app_iilabs_migrator',at:new Date().toISOString()});
+    await stage('fresh-database','passed',{nativeDataImported:false});
+   }
+  }
+  if(target.database&&!['abconnect','iilabs'].includes(name)&&!existsSync(markerFile)){
    const database=target.database;
    const key=target.prefix+'_DATABASE_URL',source=new URL(env[key]??'');
    if(!['postgres:','postgresql:'].includes(source.protocol)||!['127.0.0.1','localhost'].includes(source.hostname)||!['5432','5433'].includes(source.port||'5432'))throw Error('Only the registered local PostgreSQL source can be copied.');
@@ -152,6 +168,7 @@ try{
    dbTool('migrate');await stage('migration','passed');
   }else await stage('migration','skipped',{reason:'No pending migrations; image/configuration update only'});
   if(name==='abconnect')await grantAbconnectRuntime(adminConfig);
+  if(name==='iilabs')await grantIilabsRuntime(adminConfig,env);
   const temporary=docker(['create',manifest.image]);const serviceFile=path.join(privateRoot,'service-manifest.json');try{docker(['cp',temporary+':/opt/codebiz/apps/'+name+'/contracts/platform-service.json',serviceFile]);}finally{docker(['rm',temporary]);}
   const service=JSON.parse(await readFile(serviceFile,'utf8'));
   const profile=businessServiceProfile(target,service,{token:env[target.prefix+'_PLATFORM_SERVICE_TOKEN'],version:manifest.version,image:releaseImage});
@@ -160,7 +177,7 @@ try{
   if(name==='abconnect')env.ABCONNECT_PUBLIC_TENANT_ID=registered.tenantId;
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);
   if(name==='automation'){await prepareAutomationRedis(env,docker,async()=>{await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});await registry(env,manifest.version);});await stage('worker-redis','passed',{scoped:true});}
-  const composeEnv=path.join(privateRoot,'compose.env');await writeFile(composeEnv,rawEnvironment(name==='abconnect'?Object.fromEntries(Object.entries(env).filter(([key])=>key!=='ABCONNECT_MIGRATION_DATABASE_URL')):env),{mode:0o600});
+  const composeEnv=path.join(privateRoot,'compose.env');await writeFile(composeEnv,rawEnvironment(['abconnect','iilabs'].includes(name)?Object.fromEntries(Object.entries(env).filter(([key])=>key!==target.prefix+'_MIGRATION_DATABASE_URL')):env),{mode:0o600});
   const definition=JSON.parse(await readFile(composeFile,'utf8')),topology=ensureApplicationNetwork(docker);
   if(definition.services.platform.network_mode||!definition.services.platform.networks?.backend)throw Error('Update Platform to the independent-container network before installing applications.');
   definition.networks={backend:{external:true,name:topology.name}};

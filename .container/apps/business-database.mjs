@@ -16,6 +16,13 @@ else{
   db=(await load('src/api/database/connection.ts')).connectDatabase();runner=(await load('src/api/database/migrations.ts')).migrator(db);
  }else if(target.name==='zetro'){
   db=(await load('src/api/database/connection.ts')).connectDatabase(process.env.ZETRO_DATABASE_URL);runner=(await load('src/api/database/migrations.ts')).migrator(db);
+ }else if(target.name==='iilabs'){
+  const scope=new URL(process.env.IILABS_MIGRATION_DATABASE_URL??'');
+  if(!['postgres:','postgresql:'].includes(scope.protocol)||scope.hostname!=='postgres'||scope.pathname!=='/app_iilabs'||scope.username!=='app_iilabs_migrator')throw Error('Use the reviewed IILabs migration database and role.');
+  db=(await load('src/api/database/connection.ts')).openDatabase(process.env.IILABS_MIGRATION_DATABASE_URL);
+  const {Migrator}=createRequire(path.join(root,'package.json'))('kysely/migration');
+  const {ModuleMigrations}=await load('src/api/database/migrations.ts');
+  runner=new Migrator({db,provider:new ModuleMigrations()});
  }else if(target.name==='abconnect'){
   db=(await load('src/api/database/connection.ts')).connectDatabase(process.env.ABCONNECT_MIGRATION_DATABASE_URL);runner=(await load('src/api/database/migrations.ts')).migrator(db);
  }else if(target.name==='ecommerce'){
