@@ -1,6 +1,7 @@
 # Managed application releases
 
-CodeShip owns these local operations. Product `.container/setup.sh`, `update.sh`
+Each app-owning chat executes and verifies its own authorized selected operation.
+Do not hand deployment execution to CodeShip chat; these are shared CodeShip tools. Product `.container/setup.sh`, `update.sh`
 and `verify.sh` delegate here. Publish and prepare an explicit tagged release set
 before installation; a dirty workspace build is never a release image.
 
