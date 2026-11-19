@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.15
+Current version: 1.0.16
 
-Release tag: v-1.0.15
+Release tag: v-1.0.16
 
-Changelog label: v 1.0.15
+Changelog label: v 1.0.16
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.16
+
+### [v 1.0.16] 2026-11-19 - Bound container database startup retries and frontend source discovery
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.16.
+- Wait for read-only PostgreSQL dependency checks through framework0.2.0 before launching container applications. Retry only recovery/transport errors; preserve fatal credential/schema errors and shutdown cancellation.
+- Bound Tailwind source discovery to app frontend sources; keep existing shared UI styling.
+- Publish the documented CodeShip loopback port14350:4350 contract. No database migration or live rollout is performed by source publication.
 
 ## v-1.0.15
 

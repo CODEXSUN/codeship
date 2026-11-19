@@ -1,3 +1,6 @@
+import {createRequire,findPackageJSON} from 'node:module';
+import {pathToFileURL} from 'node:url';
+import {readFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {createServer,connect,isIP} from 'node:net';
 import {existsSync} from 'node:fs';
@@ -18,9 +21,15 @@ export function bridgePlan(name,containerAddress){
  }
  return outgoing;
 }
-export function startContainerService(name){
+export async function startContainerService(name){
  if(process.env.CODESHIP_CONTAINER_MODE!=='1'||!existsSync('/.dockerenv')||process.cwd()!=='/opt/codebiz/apps/'+name)throw Error('Use the approved CodeShip container runtime.');
  const target=name==='platform'?null:businessTarget(name);
+ const startup=new AbortController();
+ const cancel=()=>startup.abort();
+ process.once('SIGTERM',cancel);process.once('SIGINT',cancel);
+ try{await waitForDatabaseDependencies(process.env,{signal:startup.signal});}
+ catch{console.error('Container database dependencies did not become ready within the startup budget.');process.exitCode=1;return;}
+ finally{process.removeListener('SIGTERM',cancel);process.removeListener('SIGINT',cancel);}
  const child=spawn(process.execPath,[name==='automation'?'scripts/runtime.ts':'src/api/server.ts'],{stdio:'inherit',env:{...process.env,...(target?{[target.prefix+'_HOST']:'127.0.0.1',[target.prefix+'_PORT']:String(target.apiPort)}:{})}});
  const sockets=new Set(),servers=[];let stopping=false;
   function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),35000);deadline.unref();}
@@ -35,4 +44,29 @@ export function createConnectionBridge(route,sockets=new Set()){
   const upstream=connect({host:route.targetHost,port:route.targetPort});sockets.add(upstream);upstream.on('close',()=>sockets.delete(upstream));
   socket.on('error',()=>upstream.destroy());upstream.on('error',()=>socket.destroy());socket.pipe(upstream).pipe(socket);
  });
+}
+
+// Read-only startup gate; explicit migration commands remain operator-owned.
+export function transientDatabaseStartup(error){
+ return ['57P03','ECONNREFUSED','ECONNRESET','ETIMEDOUT','08006'].includes(error?.code);
+}
+export async function waitForDatabaseDependencies(environment,options={}){
+ const urls=[...new Set(Object.entries(environment).filter(([key,value])=>/DATABASE_URL$/.test(key)&&/^postgres(?:ql)?:/.test(value??'')).map(([,value])=>value))];
+ if(!urls.length)return;
+ const require=createRequire(process.cwd()+'/package.json');const {Client}=require('pg');const packageFile=findPackageJSON('@workspace/framework',pathToFileURL(process.cwd()+'/package.json'));
+ const contract=JSON.parse(readFileSync(packageFile,'utf8'));
+ const {waitForReadiness}=await import(new URL(contract.exports['.'].import,pathToFileURL(packageFile)));
+ if(typeof waitForReadiness!=='function')throw Error('Pin the released framework readiness helper.');
+ await waitForReadiness(async signal=>{
+  const timeout=3000;
+  // Parallel probes keep a complete sweep within the per-attempt budget.
+  const results=await Promise.allSettled(urls.map(async connectionString=>{
+   const client=new Client({connectionString,connectionTimeoutMillis:timeout,query_timeout:timeout,statement_timeout:timeout});
+   try{await client.connect();await client.query('SELECT 1');}finally{await client.end().catch(()=>{});}
+  }));
+  const failed=results.filter(result=>result.status==='rejected');
+  const fatal=failed.find(result=>!transientDatabaseStartup(result.reason));
+  if(fatal)throw fatal.reason;if(failed.length)throw failed[0].reason;
+  signal.throwIfAborted();return true;
+ },{timeoutMs:180000,maxAttempts:50,initialDelayMs:500,maxDelayMs:5000,retryOnError:transientDatabaseStartup,...options});
 }

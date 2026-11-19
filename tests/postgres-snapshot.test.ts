@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';import {randomBytes} from 'node:crypto';
+import {waitForDatabaseDependencies} from '../.container/apps/runtime-network.mjs';
 import pg from 'pg';import {withSourceSnapshot} from '../.container/apps/postgres-snapshot.ts';
 test('copy verification keeps the exported snapshot when source writers add records',{timeout:90000},async()=>{
  const password=randomBytes(24).toString('hex');
@@ -10,6 +11,7 @@ test('copy verification keeps the exported snapshot when source writers add reco
   const port=docker(['port',id,'5432/tcp']).split(':').at(-1),url=new URL('postgresql://postgres@127.0.0.1:'+port+'/postgres');url.password=password;
   for(let attempt=0;attempt<80;attempt++){const client=new pg.Client({connectionString:url.href,connectionTimeoutMillis:1000});try{await client.connect();writer=client;break;}catch{await client.end();await new Promise(resolve=>setTimeout(resolve,250));}}
   if(!writer)throw Error('Disposable PostgreSQL unavailable.');
+  await waitForDatabaseDependencies({CODESHIP_TEST_DATABASE_URL:url.href},{timeoutMs:10000});
   await writer.query('CREATE TABLE snapshot_records(public_id text PRIMARY KEY)');await writer.query("INSERT INTO snapshot_records VALUES ('first001')");
   await withSourceSnapshot(url.href,async(snapshot,source)=>{
    assert.match(snapshot,/^[a-zA-Z0-9-]+$/);assert.equal((await source.query('SELECT count(*)::int AS n FROM snapshot_records')).rows[0].n,1);
