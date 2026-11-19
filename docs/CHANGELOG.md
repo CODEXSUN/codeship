@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.20
+Current version: 1.0.21
 
-Release tag: v-1.0.20
+Release tag: v-1.0.21
 
-Changelog label: v 1.0.20
+Changelog label: v 1.0.21
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.21
+
+### [v 1.0.21] 2026-11-19 - Use full available Overview canvas
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.21.
+- Overview uses the available canvas with responsive padding; Master List and form wrappers retain their existing alignment.
 
 ## v-1.0.20
 
