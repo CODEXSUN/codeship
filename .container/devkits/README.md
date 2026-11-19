@@ -1,4 +1,6 @@
-# CodeShip-managed Devkits
+# Devkit-owned deployment with shared CodeShip tools
+
+Each Devkit-owning chat deploys and verifies its own authorized selected release. CodeShip chat handles CodeShip itself; do not hand another Devkit's deployment to it. Retain the shared operation lock and release/migration checks.
 
 Installation and updates now require successful tagged GitHub releases. See [the release standard](../../../../mcp-governance/docs/tagged-releases.md). Local frozen builds below are historical installation records; they cannot be resumed as a new release.
 

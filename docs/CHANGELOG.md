@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.18
+Current version: 1.0.19
 
-Release tag: v-1.0.18
+Release tag: v-1.0.19
 
-Changelog label: v 1.0.18
+Changelog label: v 1.0.19
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.19
+
+### [v 1.0.19] 2026-11-19 - Open apps from metric cards and show per-container disk rings
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.19.
+- Add accessible external-link icons to application/devkit metric cards and registered app cards, opening actual published app URLs in a separate tab without changing card-details navigation. File Manager also exposes its browser link; database/Redis TCP services do not.
+- Replace plain per-container disk text footer with the shared usage ring, comparing writable-layer-plus-mounted-data bytes to Docker filesystem capacity; unavailable capacity remains unknown. Shared filesystem usage remains in the top summary only.
+- No database migration; deploy CodeShip only and preserve sibling containers.
 
 ## v-1.0.18
 

@@ -488,3 +488,17 @@ Startup budget1.0.18 verification complete:75/75tests pass32.76s, typecheck/buil
 
 
 2026-11-19 live checkpoint: CodeShip1.0.18/Platform1.0.8/Core0.1.4/Billing1.0.8/Ecommerce1.0.12/HRMS0.1.2/UIUX0.1.11 verified through actual immutable-image/migration-plan/health/origin/metrics/admission checks. Billing1.0.8 was interim before later heavy-catalog hold; final Billing/CRM/Texlinks certification remains held, no downgrade/reset. ABConnect/Automation queue in progress; Automation migration backup required if pending. Exact stages, failed16metrics attempt/recovery, workflow18retry and preserved saved public SQL exposure policy recorded in supervisor report. Coldboot still pending; no full-stack completion claimed.
+
+
+### 2026-11-19 app-owned deployment clarification
+
+Direct user instruction supersedes earlier centralized-chat deployment ownership. Each app-owning chat keeps release/deployment/verification responsibility and may reuse shared CodeShip tooling/lock. CodeShip chat focuses on CodeShip and requested individual audits. Updated active governance, architecture, release/new-app guidance, automation plan, generated release notes and repository/installed release instructions. Historical release records retained. No runtime, database, container or deployment changes. Chat delivery and documentation checks recorded after verification.
+
+Verification: delivered the direct ownership instruction to13 relevant existing chats (including framework/supervisor and governance). Active ownership guides/template contain no remaining exclusive CodeShip-chat deployment rule; historical records retained with a superseding notice. Repository and installed release skills both pass the official validator; scoped whitespace checks pass. Latest GitHub CodeShip release and live Docker label both1.0.18, healthy14350:4350. Documentation/instruction changes only; no app deploy, database change or runtime version bump. Existing unrelated governance edits preserved.
+
+
+### 2026-11-19 metric card links and disk rings —1.0.19
+
+User authorized CodeShip-only release/deploy. Added sibling external-link icon anchors (no nested interactive elements inside CardLink) to app/devkit metric cards and registry-only app cards; File Manager also supports HTTP opening. URLs prefer actual local Docker bindings over stale localhost registry ports and allow configured HTTP/HTTPS domains; reject credentials/unsafe protocols. Cards retain their details navigation. Disk rings use container storageBytes/root filesystem capacity, not shared-used bytes; null capacity remains unavailable. Focused URL/storage tests passed; final build/full-suite and release/deployment verification pending. Ownership documentation changes from prior authorized task retained. No migrations or sibling-app deployments.
+
+1.0.19 verification:77/77tests pass15.78s, typecheck/version/whitespace checks pass, production build1.36s. Actual isolated headless browser at360/1440 across Applications/Devkits/Infrastructure (6screens) confirms no document overflow, no nested anchors, disk rings present and native new-tab click opens CodeShip14350 while preserving dashboard URL. Screenshots visually reviewed; evidence .codeship/metric-card-browser-proof.json. Preview is read-only and not a deployment. Tagged workflow and selected CodeShip deployment remain pending.
