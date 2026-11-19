@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.25
+Current version: 1.0.26
 
-Release tag: v-1.0.25
+Release tag: v-1.0.26
 
-Changelog label: v 1.0.25
+Changelog label: v 1.0.26
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.26
+
+### [v 1.0.26] 2026-11-19 - Bundle working light and dark logos for shared login
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.26.
+- Bundle the app-owned light/dark brand assets in the original shared login instead of nonexistent /logo URLs. No auth, schema, dependency or Cloudflare change.
 
 ## v-1.0.25
 

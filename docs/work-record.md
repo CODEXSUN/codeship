@@ -542,3 +542,7 @@ CodeShip1.0.23 verified on VPS with original login, fresh metrics, CSRF/origin r
 ### 2026-11-20 native/Docker cookie compatibility
 
 SDK0.1.9/1ac4441efc2280c89f3348f5f51fc03ca6e57907 selects the expected host/deployment cookie rather than rejecting an unrelated native/Docker cookie. Twenty SDK tests pass. App dependency pin updated; UI and API behavior otherwise unchanged. No migration. User explicitly reaffirmed that this chat should continue local and VPS deployment despite another chat reporting a local-only hold. Final matching verification pending.
+
+### 2026-11-20 VPS logo repair
+
+Login referenced absent /logo/logo.svg and logo-dark.svg. Reuse existing appBrand imported SVG assets so Vite bundles light/dark URLs and release image includes them. No shared component fork, auth/dependency/schema change. VPS-only release/deployment authorized; local Docker and Cloudflare untouched. Verification pending tagged build/deployment.
