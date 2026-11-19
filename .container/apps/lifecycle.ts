@@ -1,8 +1,12 @@
+import {platformDevkitNetwork} from '../devkits/platform-network.mjs';
+import {hostname} from 'node:os';
+import {hostingerTargetPolicy} from '../hostinger/target-policy.mjs';
+import {prepareFreshPlatform} from '../hostinger/platform-fresh.ts';
 import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {securePlatformRuntime} from './platform-runtime.mjs';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {spawnSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,open,unlink,rename,copyFile,chown,chmod} from 'node:fs/promises';
 import {existsSync,realpathSync} from 'node:fs';
 import {createHash,randomBytes} from 'node:crypto';
 import {parseEnv} from 'node:util';
@@ -28,6 +32,11 @@ if(name!=='platform'){await import('./business-lifecycle.ts');process.exit(proce
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||name!=='platform'||!['setup','update','verify'].includes(mode))throw new Error('Use the CodeShip apps setup/update/verify shell entry.');
 if(mode!=='verify'&&(args.length!==2||args[0]!=='--release-set'))throw new Error('Supply an approved --release-set file.');
 const operationRoot=realpathSync(path.join(appRoot,'.codeship'));
+const targetFile=path.join(operationRoot,'target.json');
+const target=existsSync(targetFile)?JSON.parse(await readFile(targetFile,'utf8')):undefined;
+const hostinger=target?.id==='hostinger-914719';
+if(hostinger)hostingerTargetPolicy({target,platform:process.platform,hostname:hostname(),appRoot,mode,prior:undefined,selected:['platform']});
+const infraNetworkName=hostinger?'cxapp-network':'codebiz-infra_default';
 const root=path.join(operationRoot,'apps/platform'),privateRoot=path.join(root,'private');await mkdir(privateRoot,{recursive:true,mode:0o700});
 const lockFile=path.join(operationRoot,'devkits/operation.lock'),lock=await open(lockFile,'wx',0o600);
 const run=new Date().toISOString().replace(/[:.]/g,'-'),stateFile=path.join(root,'state.json'),composeFile=path.join(root,'compose.json'),envFile=path.join(privateRoot,'runtime.env');
@@ -40,10 +49,11 @@ async function verify(image?:string){
  for(const url of ['/api/live','/api/ready','/','/api/v1/platform/config']){const response=await fetch('http://127.0.0.1:'+platformTarget.port+url,{signal:AbortSignal.timeout(10000)});if(response.status!==200)throw new Error('Platform readiness failed.');await response.body?.cancel();}
  const foreign=await fetch('http://127.0.0.1:'+platformTarget.port+'/api/ready',{headers:{origin:'https://example.invalid'}});if(foreign.status!==403)throw new Error('Platform Docker origin guard failed.');
  const facts=JSON.parse(docker(['inspect','--format','{"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"image":{{json .Image}},"ports":{{json .HostConfig.PortBindings}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":{{json .NetworkSettings.Networks}}}',name]));
- verifyIndependentContainer(name,facts);
+ verifyIndependentContainer(name,hostinger?{...facts,networks:Object.fromEntries(Object.entries(facts.networks).filter(([key])=>key==='applications_backend'))}:facts);
+ if(hostinger&&Object.keys(facts.networks).some(key=>!['applications_backend','devkits_default'].includes(key)))throw Error('Unexpected Platform network attachment.');
  if(facts.project!=='applications'||facts.health!=='healthy'||!Object.values(facts.ports).every((bindings:any)=>bindings.every((binding:any)=>binding.HostIp==='127.0.0.1'))||(image&&facts.image!==docker(['image','inspect',image,'--format','{{.Id}}'])))throw new Error('Platform release identity or binding mismatch.');
  await ensureMetricsCollector();
- for(let attempt=0;attempt<40;attempt++){const report=await(await fetch(installedCodeshipOrigin(appRoot)+'/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service==='platform'&&row.owner==='apps/platform'))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw new Error('Fresh Platform metrics unavailable.');
+ for(let attempt=0;attempt<40;attempt++){try{const report=JSON.parse(await readFile(path.join(appRoot,'.codeship/metrics/snapshot.json'),'utf8'));if(report.available&&Date.now()-Date.parse(report.collectedAt)<45000&&report.containers.some((row:any)=>row.project==='applications'&&row.service==='platform'&&row.owner==='apps/platform'&&docker(['inspect','platform','--format','{{.Id}}']).startsWith(row.id)))return;}catch{}await new Promise(resolve=>setTimeout(resolve,1000));}throw new Error('Fresh Platform metrics unavailable.');
 }
 try {
  if(mode==='verify'){await verify(prior?.image);await stage('verification','passed');}
@@ -51,7 +61,7 @@ try {
   if(mode==='setup'&&prior)throw new Error('Platform is installed; use update.sh.');if(mode==='update'&&!prior)throw new Error('Install Platform first.');
   if(prior){const recovery=path.join(privateRoot,'recovery',run);await mkdir(recovery,{recursive:true,mode:0o700});for(const file of [composeFile,envFile,path.join(privateRoot,'compose.env'),stateFile])if(existsSync(file))await copyFile(file,path.join(recovery,path.basename(file)));await stage('previous-configuration','retained',{directory:recovery});}
   requireRawCompose(docker(['compose','version','--short']));
-  if(!prior)for(const target of Object.values(businessTargets))await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(target.port,'127.0.0.1',()=>probe.close(()=>resolve()));});
+  if(!prior&&!hostinger)for(const target of Object.values(businessTargets))await new Promise<void>((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(target.port,'127.0.0.1',()=>probe.close(()=>resolve()));});
   if(!prior&&docker(['ps','-aq','--filter','name=^/platform$']))throw new Error('Platform name is occupied.');
   const bindings=prior?JSON.parse(docker(['inspect','platform','--format','{{json .HostConfig.PortBindings}}'])):{};
   const alreadyOwned=bindings[platformTarget.apiPort+'/tcp']?.some((row:any)=>row.HostIp==='127.0.0.1'&&row.HostPort===String(platformTarget.port));
@@ -73,7 +83,9 @@ try {
   const connectionEnv=(value:string)=>{const url=new URL(value);return {...process.env,PGHOST:url.hostname,PGPORT:url.port||'5432',PGDATABASE:url.pathname.slice(1),PGUSER:decodeURIComponent(url.username),PGPASSWORD:decodeURIComponent(url.password),PGSSLMODE:url.searchParams.get('sslmode')??'disable'};};
   const admin=new pg.Client(adminConfig);await admin.connect();
   try{
-   if(!existsSync(markerFile)){
+   if(!existsSync(markerFile)&&hostinger){
+    await prepareFreshPlatform({admin,env,root,privateRoot,envFile,markerFile,image:manifest.image,docker,stage});
+   }else if(!existsSync(markerFile)){
     const source=parseEnv(await readFile(path.join(workspaceRoot,'apps/platform/.env'),'utf8'));
     platformRegistration(source,manifest.version); // Validate registry fields before any target provisioning.
     const masterURL=source.PLATFORM_MASTER_DATABASE_URL;if(!masterURL)throw new Error('Native Platform database configuration missing.');
@@ -120,7 +132,7 @@ try {
   env=securePlatformRuntime(env,platformTarget.port,manifest.version);
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
   // Load env through Node's parser: Docker --env-file does not unquote dotenv values.
-  const dbTool=(command:string)=>docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/release-database.ts',command]);
+  const dbTool=(command:string)=>docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/release-database.ts',command]);
   const plans=JSON.parse(dbTool('plan')),current:Record<string,string>={};
   for(const [file,hash]of Object.entries(manifest.migrations)){const key=(file.includes('/tenant-migrations/')?'tenant:':'master:')+path.basename(file,'.ts');current[key]=hash as string;}
   let pending=false;
@@ -130,17 +142,28 @@ try {
    const marker=JSON.parse(await readFile(markerFile,'utf8'));for(const scope of marker.scopes){const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);const dump=path.join(privateRoot,scope.database+'-before-'+run+'.dump');execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',dump],undefined,connectionEnv(target.href));execute(path.join(bin,'pg_restore'),['--list',dump]);await stage('backup-'+scope.database,'passed',{dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});}
    dbTool('migrate');await stage('migration','passed');
   }else await stage('migration','skipped',{reason:'No pending master or tenant migrations; image-only update'});
-  if(env.PLATFORM_ENTRY_BINDINGS){const supported=docker(['run','--rm','--network','none','--entrypoint','node',manifest.image,'-e',"console.log(require('node:fs').existsSync('scripts/configure-local-entry.ts')?'supported':'legacy')"]);if(supported==='supported'){docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/configure-local-entry.ts']);await stage('local-entry-hosts','passed');}else await stage('local-entry-hosts','skipped',{reason:'Released image has no optional entry adapter; retain settings without claiming host configuration'});}
-  const topology=ensureApplicationNetwork(docker),peers=topology.peers;
+  if(env.PLATFORM_ENTRY_BINDINGS&&!hostinger){const supported=docker(['run','--rm','--network','none','--entrypoint','node',manifest.image,'-e',"console.log(require('node:fs').existsSync('scripts/configure-local-entry.ts')?'supported':'legacy')"]);if(supported==='supported'){docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/configure-local-entry.ts']);await stage('local-entry-hosts','passed');}else await stage('local-entry-hosts','skipped',{reason:'Released image has no optional entry adapter; retain settings without claiming host configuration'});}
+  const topology=ensureApplicationNetwork(docker,hostinger?'cxapp-postgres':'codebiz-infra');
+  const ingress=hostinger?JSON.parse(docker(['network','inspect','devkits_default']))[0]:undefined;
+  const ingressPeers=ingress?[ingress.IPAM.Config[0].Gateway,...Object.values(ingress.Containers??{}).map((row:any)=>row.IPv4Address.split('/')[0])]:[];
+  const devkitPeers=platformDevkitNetwork(JSON.parse(docker(['network','inspect','applications_backend']))[0]).peers;
+  const peers=[topology.peers,devkitPeers,...ingressPeers].join(',');
   await stage('private-network','passed',{network:topology.name,subnet:topology.subnet});
   const composeEnvFile=path.join(privateRoot,'compose.env');await writeFile(composeEnvFile,rawEnvironment(env),{mode:0o600});
-  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:'+platformTarget.port+':'+platformTarget.apiPort],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:String(platformTarget.port),PLATFORM_WEB_ORIGIN:'http://127.0.0.1:'+platformTarget.port,PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:env.PLATFORM_REQUIRE_PASSWORD_CHANGE,PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],...startupHealth},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
+  const definition={name:'applications',services:{platform:{image:manifest.image,container_name:'platform',init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],ports:['127.0.0.1:'+platformTarget.port+':'+platformTarget.apiPort],env_file:[{path:composeEnvFile,format:'raw'}],environment:{NODE_ENV:'production',PLATFORM_HOST:'0.0.0.0',PLATFORM_PORT:'4385',PLATFORM_WEB_PORT:String(platformTarget.port),PLATFORM_WEB_ORIGIN:env.PLATFORM_WEB_ORIGIN,PLATFORM_BIND_MODE:'docker-direct',PLATFORM_DOCKER_PEERS:peers,PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:env.PLATFORM_REQUIRE_PASSWORD_CHANGE,PLATFORM_GATEWAY_ENABLED:'0'},networks:['infra'],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:4385/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],...startupHealth},stop_grace_period:'45s'}},networks:{infra:{external:true,name:'codebiz-infra_default'}}};
   const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','runtime-network.mjs','startup-budget.mjs','start-platform.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
+  if(hostinger){await chown(runtime,0,1000);await chmod(runtime,0o750);for(const file of ['business-targets.mjs','runtime-network.mjs','startup-budget.mjs','start-platform.mjs']){await chown(path.join(runtime,file),0,1000);await chmod(path.join(runtime,file),0o640);}}
   Object.assign(definition.services.platform,{command:['node','/run/codeship/start-platform.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true}]});
   Object.assign(definition.services.platform.environment,{CODESHIP_CONTAINER_MODE:'1'});
   applyIndependentNetwork(definition.services.platform,'platform',topology);
   Object.assign(definition,{networks:{backend:{external:true,name:topology.name}}});
-  Object.assign(definition.services.platform.environment,{PLATFORM_GATEWAY_ENABLED:'1',PLATFORM_GATEWAY_ALLOWED_ORIGINS:JSON.stringify(Object.values(businessTargets).map(target=>'http://127.0.0.1:'+target.apiPort)),PLATFORM_GATEWAY_IMAGE_UPLOADS:JSON.stringify([{appKey:'ecommerce',path:'/api/v1/desk/product-images'}])});
+  Object.assign(definition.services.platform.environment,{PLATFORM_GATEWAY_ENABLED:'1',PLATFORM_GATEWAY_ALLOWED_ORIGINS:JSON.stringify([...Object.values(businessTargets).map(target=>'http://127.0.0.1:'+target.apiPort),'http://codeship:4350','http://codeitz:4305','http://uiux:4315']),PLATFORM_GATEWAY_IMAGE_UPLOADS:JSON.stringify([{appKey:'ecommerce',path:'/api/v1/desk/product-images'}])});
+  if(hostinger){
+   Object.assign(definition.networks,{ingress:{external:true,name:'devkits_default'}});
+   const previousIngress=Object.values(ingress.Containers??{}).find((row:any)=>row.Name==='platform') as any;
+   (definition.services.platform.networks as any).ingress=previousIngress?{ipv4_address:previousIngress.IPv4Address.split('/')[0]}:{};
+   Object.assign(definition.services.platform.environment,{PLATFORM_GATEWAY_ALLOWED_ORIGINS:env.PLATFORM_GATEWAY_ALLOWED_ORIGINS,PLATFORM_GATEWAY_IMAGE_UPLOADS:'[]',PLATFORM_BROWSER_ORIGINS:env.PLATFORM_BROWSER_ORIGINS,PLATFORM_INSTALL_DOMAINS:env.PLATFORM_INSTALL_DOMAINS});
+  }
   if(existsSync(composeFile)){const existing=JSON.parse(await readFile(composeFile,'utf8'));for(const [sibling,service] of Object.entries(existing.services??{}))if(sibling!=='platform'){if((service as any).network_mode)throw Error('Migrate existing shared-network application containers explicitly before replacing Platform.');(definition.services as Record<string,unknown>)[sibling]=service;}Object.assign(definition,{networks:{...(existing.networks??{}),...definition.networks}});if(existing.volumes)Object.assign(definition,{volumes:existing.volumes});}
   await save(composeFile,definition);docker(['compose','-p','applications','-f',composeFile,'config','--quiet']);
   const payload=JSON.stringify([platformRegistration(env,manifest.version)]);

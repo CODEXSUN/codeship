@@ -1,4 +1,9 @@
+import {admitPlatformDevkit} from './platform-admission.mjs';
+import {platformDevkitNetwork} from './platform-network.mjs';
 import {createServer} from 'node:net';
+import {hostname} from 'node:os';
+import {freshUbuntuSetup} from '../ubuntu/target-policy.mjs';
+import {hostingerTargetPolicy} from '../hostinger/target-policy.mjs';
 import {spawnSync} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
 import {mkdir,readFile,writeFile,open,unlink,rename,chmod} from 'node:fs/promises';
@@ -41,6 +46,12 @@ const compose=(args:string[])=>execute('docker',['compose','--project-name','dev
 const jsonFile=async(file:string)=>JSON.parse(await readFile(file,'utf8'));
 async function save(file:string,value:unknown){await writeFile(file+'.next',JSON.stringify(value,null,2)+'\n',{mode:0o600});await rename(file+'.next',file);}
 let prior:any=existsSync(stateFile)?await jsonFile(stateFile):undefined;
+const targetFile=path.join(appRoot,'.codeship/target.json');
+const ubuntuTarget=existsSync(targetFile)?await jsonFile(targetFile):undefined;
+const targetArguments={target:ubuntuTarget,platform:process.platform,hostname:hostname(),appRoot,mode,prior,selected};
+const hostinger=ubuntuTarget?.id==='hostinger-914719';
+const freshUbuntu=hostinger?hostingerTargetPolicy(targetArguments):freshUbuntuSetup(targetArguments);
+const infraNetworkName=hostinger?'cxapp-network':'codebiz-infra_default';
 const ports={codeship:codeshipHostPort,codeitz:14305,uiux:14315},internal={codeship:4350,codeitz:4305,uiux:4315};
 const images:Record<string,any>={...(prior?.services??{})};
 const histories:Record<string,any>={};
@@ -57,8 +68,8 @@ async function verify(){
   if(name==='codeship'&&!['codeship_data','codeship_keys'].every(volume=>facts.mounts.some((m:any)=>m.Name===volume)))throw new Error('CodeShip data/key volumes changed.');
   if(name==='codeship'&&(Object.keys(facts.ports??{}).length!==1||facts.ports['4350/tcp']?.length!==1||facts.ports['4350/tcp'][0].HostIp!=='127.0.0.1'||facts.ports['4350/tcp'][0].HostPort!==String(codeshipHostPort)))throw Error('CodeShip must publish only its own loopback 14350:4350 port.');
  }
- for(let attempt=0;attempt<30;attempt++){const report=await(await fetch(codeshipOrigin+'/api/v1/docker-metrics/devkits')).json();if(report.available&&!report.stale&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name)))return;await new Promise(resolve=>setTimeout(resolve,1000));}
- throw new Error('Fresh grouped Devkit metrics not available.');
+ const selectedIdentities=Object.fromEntries(selected.map(name=>[name,docker(['inspect',name,'--format','{{.Id}}'])]));
+ for(let attempt=0;attempt<30;attempt++){try{const report=await jsonFile(path.join(appRoot,'.codeship/metrics/snapshot.json'));if(report.available&&Date.now()-Date.parse(report.collectedAt)<45000&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name&&selectedIdentities[name].startsWith(r.id))))return;}catch{}await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh selected devkit metrics unavailable.');
 }
 try{
  if(mode==='verify'){await verify();await stage('verification','passed');}
@@ -66,7 +77,7 @@ try{
   if(docker(['info','--format','{{.OSType}}'])!=='linux')throw new Error('Linux Docker required.');
   requireRawCompose(docker(['compose','version','--short']));
   const legacyState=existsSync(path.join(appRoot,'.codeship/docker/codeship.env.release.json'))?await jsonFile(path.join(appRoot,'.codeship/docker/codeship.env.release.json')):undefined;
-  if(!prior&&!legacyState)throw new Error('Existing reviewed CodeShip deployment is required for group adoption.');
+  if(!prior&&!legacyState&&!freshUbuntu)throw new Error('Existing reviewed CodeShip deployment is required for group adoption.');
   if(mode==='update'&&!prior)throw new Error('Run setup.sh once to adopt the Devkits group.');
   for(const name of selected){
    const existing=docker(['ps','-aq','--filter','name=^/'+name+'$']);if(existing&&docker(['inspect','--format','{{index .Config.Labels "com.docker.compose.project"}}',existing])!=='devkits')throw new Error('Container name already belongs to another deployment.');
@@ -93,17 +104,23 @@ try{
    const id=docker(['create',images.codeship.image]);
    try{docker(['cp',id+':/opt/codebiz/devkit/codeship/.container/devkits',buildContext]);}finally{docker(['rm',id]);}
    for(const name of selected)images[name].contractRoot=path.join(buildContext,'devkits');
+   if(hostinger&&selected.includes('codeitz')){const {copyFile}=await import('node:fs/promises');await copyFile(path.join(appRoot,'.container/devkits/codeitz-plan.ts'),path.join(buildContext,'devkits/codeitz-plan.ts'));}
    await stage('github-release-images','passed',{services:selected,tags:selected.map(name=>images[name].releaseTag)});
   }
   if(!images.codeship)images.codeship={...legacyState,version:(await jsonFile(path.join(appRoot,'package.json'))).version};
   if(!existsSync(composeFile)&&!selected.includes('codeship'))throw new Error('Adopt CodeShip with the group setup.sh before separate installs.');
   let network:any;try{network=JSON.parse(docker(['network','inspect','devkits_default']))[0];}catch{docker(['network','create','--label','codeship.owner=devkits','devkits_default']);network=JSON.parse(docker(['network','inspect','devkits_default']))[0];}
-  const infraNetwork=JSON.parse(docker(['network','inspect','codebiz-infra_default']))[0];
+  const infraNetwork=JSON.parse(docker(['network','inspect',infraNetworkName]))[0];
   const infraPeers=infraNetwork.IPAM.Config.map((row:any)=>row.Gateway).filter(Boolean).join(',');
   const peers=network.IPAM.Config.map((row:any)=>row.Gateway).filter((ip:string)=>/^\d+\.\d+\.\d+\.\d+$/.test(ip)).join(',');if(!peers)throw new Error('Devkit bridge gateway unavailable.');
   const existingRows=await db.selectFrom('applications').selectAll().execute();
   const sourceRows:Record<string,any>={},settings:Record<string,Record<string,string>>={};
   for(const name of names){sourceRows[name]=existingRows.find(row=>row.owner==='devkit/'+name&&row.environment==='local-docker')??existingRows.find(row=>row.owner==='devkit/'+name);const source=sourceRows[name];settings[name]=source?.encrypted_secrets?currentEnvironment(decryptSecrets(source.public_id,source.encrypted_secrets)):{};}
+  const authenticated=selected.filter(name=>settings[name][name.toUpperCase()+'_PLATFORM_AUTH']==='1');
+  const platformNetwork=authenticated.length?platformDevkitNetwork(JSON.parse(docker(['network','inspect','applications_backend']))[0]):undefined;
+  const connectorPeers=hostinger?Object.values(network.Containers??{}).filter((row:any)=>['cloudflared','platform'].includes(row.Name)).map((row:any)=>row.IPv4Address.split('/')[0]):[];
+  if(hostinger&&authenticated.length&&connectorPeers.length!==2)throw Error('Resolve the existing tunnel connector and Platform peers.');
+  for(const name of authenticated)await stage('platform-admission-'+name,'prepared',await admitPlatformDevkit({action:'prepare',name,release:images[name],settings:settings[name],appRoot,docker}));
   const pgRecord=await db.selectFrom('infrastructure_services').selectAll().where('kind','=','postgres').where('environment','=','local-docker').executeTakeFirstOrThrow();
   const pgSecrets=pgRecord.encrypted_secrets?decryptSecrets(pgRecord.public_id,pgRecord.encrypted_secrets):{};
   const adminConfig={host:'127.0.0.1',port:pgRecord.port??5433,database:'postgres',user:pgRecord.username,password:pgSecrets.password,connectionTimeoutMillis:5000};
@@ -121,6 +138,7 @@ try{
    settings.codeitz={...settings.codeitz,PGHOST:'postgres',PGPORT:String(pgRecord.docker_port??5432),PGDATABASE:'codeitz',PGUSER:'codeitz',PGPASSWORD:password,PGSSLMODE:'disable',CODEITZ_PG_TRANSPORT:'docker-network',CODEITZ_WORKSPACE_ROOT:'/workspace'};
    for(const key of Object.keys(settings.codeitz))if(isProtectedEnvironmentKey(key))delete settings.codeitz[key];
    await writeFile(codeitzEnvFile,serializeDeploymentEnvironment(settings.codeitz),{mode:0o600});
+   if(hostinger){const {chown}=await import('node:fs/promises');await chown(codeitzEnvFile,1000,1000);}
    const admin=new pg.Client(adminConfig);await admin.connect();
    try{
     const exists=(await admin.query("SELECT datname FROM pg_database WHERE datname='codeitz'")).rowCount;
@@ -132,7 +150,11 @@ try{
      await admin.query('CREATE DATABASE codeitz OWNER codeitz');await save(markerFile,{status:'created',database:'codeitz'});
     }
     if(marker?.status==='imported'&&savedEnv.PGPASSWORD&&savedEnv.PGPASSWORD!==password)await admin.query("ALTER ROLE codeitz PASSWORD '"+password.replaceAll("'","''")+"'");
-    if(!marker||marker.status!=='imported'){
+    if(hostinger){
+     if(marker&&marker.status!=='fresh')throw Error('Unexpected Hostinger Codeitz database marker');
+     if(!marker)await save(markerFile,{status:'fresh',database:'codeitz',dataImported:false});
+     await stage('codeitz-data-copy','skipped',{reason:'Fresh Hostinger database; local data import forbidden'});
+    }else if(!marker||marker.status!=='imported'){
      await stage('codeitz-data-copy','started');
      const sourceModule=await import(pathToFileURL(path.join(workspaceRoot,'devkit/codeitz/src/api/database.ts')).href),source=sourceModule.databaseSettings();
      const bin=process.platform==='win32'?'C:/Program Files/PostgreSQL/17/bin/':'';
@@ -165,18 +187,22 @@ try{
    codeShipTool(['scripts/backup.ts','/data/backups/devkits-'+run+'.sqlite']);codeShipTool(['scripts/database.ts','migrate']);await stage('codeship-migration','passed',{backupCreated:true});
   }else await stage('codeship-migration','skipped',{reason:'No pending migrations; data and key volumes retained'});
   if(images.codeitz&&selected.includes('codeitz')){
-   const plan=JSON.parse(docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--mount','type=bind,source='+path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-plan.ts')+',target=/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts,readonly','--entrypoint','node',images.codeitz.image,'/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts']));
+   const plan=JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--mount','type=bind,source='+path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-plan.ts')+',target=/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts,readonly','--entrypoint','node',images.codeitz.image,'/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts']));
    const decision=migrationDecision(plan,histories.codeitz??prior?.services.codeitz?.migrations,images.codeitz.migrations);
    if(decision.migrateRequired){
     if(prior?.services.codeitz){docker(['stop','codeitz']);const {parseEnv}=await import('node:util');const env=parseEnv(await readFile(codeitzEnvFile,'utf8')),backup=path.join(privateRoot,'codeitz-before-migration-'+run+'.dump'),bin=process.platform==='win32'?'C:/Program Files/PostgreSQL/17/bin/':'';execute(path.join(bin,'pg_dump'),['--format=custom','--file',backup],{env:{...process.env,...env,PGHOST:'127.0.0.1',PGPORT:String(pgRecord.port??5433)},quiet:true});execute(path.join(bin,'pg_restore'),['--list',backup],{quiet:true});await stage('codeitz-backup','passed',{backup,sha256:createHash('sha256').update(await readFile(backup)).digest('hex'),check:'Archive readable; no restore rehearsal claimed'});}
-    docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--entrypoint','node',images.codeitz.image,'scripts/database.ts']);await stage('codeitz-migration','passed');
+    docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--entrypoint','node',images.codeitz.image,'scripts/database.ts']);await stage('codeitz-migration','passed');
    }else await stage('codeitz-migration','skipped',{reason:'No pending PostgreSQL migrations'});
+   if(hostinger&&!prior?.services.codeitz){
+    docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--mount','type=bind,source='+path.join(appRoot,'.container/devkits/codeitz-fresh.ts')+',target=/opt/codebiz/devkit/codeitz/scripts/codeship-fresh.ts,readonly','--entrypoint','node',images.codeitz.image,'scripts/codeship-fresh.ts']);
+    await stage('codeitz-fresh-references','passed',{dataImported:false,businessRecords:0});
+   }
   }
   const payload=[];
   for(const name of selected){
    const source=sourceRows[name],secrets=source?.encrypted_secrets?decryptSecrets(source.public_id,source.encrypted_secrets):{};
    const savedSecrets=Object.fromEntries(['password','token','sshKey','saPassword','adminPassword','userPassword'].filter(key=>secrets[key]).map(key=>[key,secrets[key]]));
-   if(name!=='codeship')savedSecrets.env=serializeDeploymentEnvironment(settings[name]);
+   savedSecrets.env=serializeDeploymentEnvironment(settings[name]);
    payload.push({name:name==='codeship'?'CodeShip':name==='codeitz'?'Codeitz':'UIUX',owner:'devkit/'+name,project:'devkits',environment:'local-docker',host:'127.0.0.1',port:ports[name],version:images[name].version,username:source?.username??'',notes:'CodeShip-managed Devkits Docker group',users:installationUsers(secrets).map(({hasPassword,...user})=>user),secrets:savedSecrets});
   }
   const registryPayload=JSON.stringify(requireSelectedRegistry(payload,selected));
@@ -190,16 +216,27 @@ try{
   };
   if(images.codeitz)services.codeitz={...service('codeitz'),env_file:[{path:codeitzComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',CODEITZ_HOST:'0.0.0.0',CODEITZ_PORT:'4305',CODEITZ_BIND_MODE:'docker-direct',CODEITZ_DOCKER_PEERS:[peers,infraPeers].filter(Boolean).join(','),CODEITZ_WORKSPACE_ROOT:'/workspace'},command:['node','/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts'],volumes:['workspace:/workspace','codeitz_state:/opt/codebiz/devkit/codeitz/.codeitz','codeitz_codex:/home/node/.codex',bind(path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-start.ts'),'/opt/codebiz/devkit/codeitz/scripts/codeship-start.ts')],networks:['default','infra']};
   if(images.uiux)services.uiux={...service('uiux'),env_file:[{path:uiuxComposeEnv,format:'raw'}],environment:{NODE_ENV:'production',UIUX_HOST:'0.0.0.0',UIUX_PORT:'4315',UIUX_BIND_MODE:'docker-direct',UIUX_DOCKER_PEERS:peers},command:['node','src/api/server.ts']};
-  const definition={name:'devkits',services,volumes:{codeship_data:{external:true,name:'codeship_data'},codeship_keys:{external:true,name:'codeship_keys'},workspace:{external:true,name:'codeitz-docker-local_workspace'},codeitz_state:{},codeitz_codex:{}},networks:{default:{external:true,name:'devkits_default'},infra:{external:true,name:'codebiz-infra_default'}}};
+  const definition={name:'devkits',services,volumes:{codeship_data:{external:true,name:'codeship_data'},codeship_keys:{external:true,name:'codeship_keys'},workspace:{external:true,name:'codeitz-docker-local_workspace'},codeitz_state:{},codeitz_codex:{}},networks:{default:{external:true,name:'devkits_default'},infra:{external:true,name:infraNetworkName}}};
+  if(platformNetwork){
+   (definition.networks as any).backend={external:true,name:platformNetwork.name};
+   for(const name of authenticated){
+    const item=services[name];const original=Array.isArray(item.networks)?Object.fromEntries(item.networks.map(key=>[key,{}])):item.networks??{default:{}};
+    item.networks={...original,backend:{ipv4_address:platformNetwork.addresses[name]}};
+    item.extra_hosts=['platform:'+platformNetwork.platform];
+    item.environment[name.toUpperCase()+'_DOCKER_PEERS']=[item.environment[name.toUpperCase()+'_DOCKER_PEERS'],platformNetwork.platform,platformNetwork.gateway,...connectorPeers].filter(Boolean).join(',');
+   }
+  }
+  if(ubuntuTarget){const used=new Set(Object.values(services).flatMap((s:any)=>(s.volumes??[]).map((v:any)=>typeof v==='string'?v.split(':')[0]:v.type==='volume'?v.source:null)).filter(Boolean));for(const key of Object.keys(definition.volumes))if(!used.has(key))delete (definition.volumes as any)[key];}
   if(prior&&existsSync(composeFile)){
    const existing=await jsonFile(composeFile);
    preserveUnselected(definition,existing,selected);
   }
   await save(composeFile,definition);docker(['compose','-p','devkits','-f',composeFile,'config','--quiet']);
   await stage('replacement','started');
-  if(!prior){const old=docker(['ps','-aq','--filter','label=com.docker.compose.project=codeship','--filter','label=com.docker.compose.service=app']);if(!old)throw new Error('Former CodeShip container missing.');const facts=JSON.parse(docker(['inspect','--format','{"image":{{json .Config.Image}},"mounts":{{json .Mounts}}}',old]));if(facts.image!==legacyState.image||!['codeship_data','codeship_keys'].every(name=>facts.mounts.some((m:any)=>m.Name===name)))throw new Error('Former CodeShip identity/volume mismatch.');docker(['stop',old]);}
-  compose(['up','-d','--no-build','--wait','--wait-timeout','180',...selected]);
+  if(!prior&&!freshUbuntu){const old=docker(['ps','-aq','--filter','label=com.docker.compose.project=codeship','--filter','label=com.docker.compose.service=app']);if(!old)throw new Error('Former CodeShip container missing.');const facts=JSON.parse(docker(['inspect','--format','{"image":{{json .Config.Image}},"mounts":{{json .Mounts}}}',old]));if(facts.image!==legacyState.image||!['codeship_data','codeship_keys'].every(name=>facts.mounts.some((m:any)=>m.Name===name)))throw new Error('Former CodeShip identity/volume mismatch.');docker(['stop',old]);}
+  compose(['up','-d','--no-deps','--no-build','--wait','--wait-timeout','180',...selected]);
   await verify();await stage('verification','passed');
+  for(const name of authenticated)await stage('platform-admission-'+name,'passed',await admitPlatformDevkit({action:'complete',name,release:images[name],settings:settings[name],appRoot,docker}));
   await save(stateFile,{project:'devkits',services:images,updatedAt:new Date().toISOString(),compose:composeFile});
   if(!prior){const old=docker(['ps','-aq','--filter','label=com.docker.compose.project=codeship','--filter','label=com.docker.compose.service=app']);if(old)docker(['rm',old]);}
   await stage('release','succeeded',{services:selected,ports:selected.map(name=>ports[name])});

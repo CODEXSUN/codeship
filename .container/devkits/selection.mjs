@@ -1,7 +1,7 @@
 export function preserveUnselected(definition,existing,selected){
  for(const [name,service]of Object.entries(existing.services??{}))if(!selected.includes(name))definition.services[name]=structuredClone(service);
- definition.volumes=structuredClone(existing.volumes??definition.volumes);
- definition.networks=structuredClone(existing.networks??definition.networks);
+ definition.volumes=structuredClone({...definition.volumes,...existing.volumes});
+ definition.networks=structuredClone({...definition.networks,...existing.networks});
  return definition;
 }
 export function requireSelectedRegistry(rows,selected){

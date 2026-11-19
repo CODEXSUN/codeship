@@ -9,5 +9,5 @@ export function securePlatformRuntime(environment, webPort, version='1.0.6') {
  return {...environment,NODE_ENV:'production',PLATFORM_BIND_MODE:'docker-direct',PLATFORM_GATEWAY_ENABLED:'1',
   PLATFORM_DEV_AUTO_LOGIN:'0',PLATFORM_DEV_MASTER_FRESH:'0',PLATFORM_DEV_TENANT_FRESH:'0',
   PLATFORM_DEV_MASTER_SEED:'0',PLATFORM_DEV_TENANT_SEED:'0',PLATFORM_REQUIRE_PASSWORD_CHANGE:passwordPolicy,
-  PLATFORM_WEB_PORT:String(webPort),PLATFORM_WEB_ORIGIN:'http://127.0.0.1:'+webPort};
+  PLATFORM_WEB_PORT:String(webPort),PLATFORM_WEB_ORIGIN:environment.PLATFORM_BROWSER_ORIGINS&&environment.PLATFORM_WEB_ORIGIN?.startsWith('https://')?environment.PLATFORM_WEB_ORIGIN:'http://127.0.0.1:'+webPort};
 }

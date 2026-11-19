@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.22
+Current version: 1.0.23
 
-Release tag: v-1.0.22
+Release tag: v-1.0.23
 
-Changelog label: v 1.0.22
+Changelog label: v 1.0.23
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.23
+
+### [v 1.0.23] 2026-11-19 - Preserve Platform login settings in selected Docker updates
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.23.
+- Preserve selected CodeShip environment settings, wire stable private Platform connectivity and exact connector peers, verify metrics directly from the host snapshot, and perform release-identity/permission-aware devkit admission. Reuse the shared exclusive setup/update lifecycle, fresh identity-only Hostinger adapter and existing-SA decision. Retire the rejected custom-login adapter. No database migrations.
 
 ## v-1.0.22
 

@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {hostingerTargetPolicy} from '../.container/hostinger/target-policy.mjs';
+const target={id:'hostinger-914719',host:'69.62.81.166',operator:'/home/codebiz/.deployment/operators/v-1.0.21/devkit/codeship',binding:'127.0.0.1',publicExposure:false,dataPolicy:'fresh',infraNetwork:'cxapp-network'};
+const input={target,platform:'linux',hostname:'srv914719',appRoot:target.operator+'/',mode:'setup',selected:['codeship']};
+test('requires selected private Hostinger identity and lock marker',()=>{process.env.CODESHIP_HOSTINGER_FLOCK='1';assert.equal(hostingerTargetPolicy(input),true);for(const patch of [{hostname:'cxserver'},{platform:'win32'},{selected:['codeship','uiux']},{target:{...target,publicExposure:true}},{target:{...target,operator:'/tmp/operator'}}])assert.throws(()=>hostingerTargetPolicy({...input,...patch}));delete process.env.CODESHIP_HOSTINGER_FLOCK;assert.throws(()=>hostingerTargetPolicy(input));});
+test('existing state cannot become a fresh installation',()=>{process.env.CODESHIP_HOSTINGER_FLOCK='1';assert.equal(hostingerTargetPolicy({...input,prior:{}}),false);assert.equal(hostingerTargetPolicy({...input,mode:'update'}),false);delete process.env.CODESHIP_HOSTINGER_FLOCK;});
