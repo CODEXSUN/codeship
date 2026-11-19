@@ -1,3 +1,4 @@
+import {startupBudget} from './startup-budget.mjs';
 import {createRequire,findPackageJSON} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {readFileSync} from 'node:fs';
@@ -68,5 +69,5 @@ export async function waitForDatabaseDependencies(environment,options={}){
   const fatal=failed.find(result=>!transientDatabaseStartup(result.reason));
   if(fatal)throw fatal.reason;if(failed.length)throw failed[0].reason;
   signal.throwIfAborted();return true;
- },{timeoutMs:180000,maxAttempts:50,initialDelayMs:500,maxDelayMs:5000,retryOnError:transientDatabaseStartup,...options});
+ },{timeoutMs:startupBudget.dependencyMs,maxAttempts:70,initialDelayMs:500,maxDelayMs:5000,retryOnError:transientDatabaseStartup,...options});
 }

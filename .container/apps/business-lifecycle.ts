@@ -1,3 +1,4 @@
+import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {dockerBrowserOrigins} from './browser-origins.mjs';
 import {prepareAbconnectDatabase,grantAbconnectRuntime} from './abconnect-database.ts';
 import {prepareCrmDatabase} from './crm-database.ts';
@@ -139,7 +140,7 @@ try{
     await save(markerFile,{status:'imported',database:target.database,role:target.database,dump,sha256:createHash('sha256').update(await readFile(dump)).digest('hex')});await stage('database-copy','passed');
    }finally{await admin.end();}
   }
-  const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','business-database.mjs','runtime-network.mjs','start-business.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
+  const runtime=path.join(privateRoot,'runtime-'+run);await mkdir(runtime,{recursive:true,mode:0o700});for(const file of ['business-targets.mjs','business-database.mjs','runtime-network.mjs','startup-budget.mjs','start-business.mjs'])await copyFile(path.join(appRoot,'.container/apps',file),path.join(runtime,file));
   await writeFile(envFile,serializeDeploymentEnvironment(env),{mode:0o600});
   await registry(env,manifest.version);
   const dbTool=(command:string)=>docker(['run','--rm','--network','codebiz-infra_default','--mount','type=bind,source='+envFile+',target=/run/app.env,readonly','--mount','type=bind,source='+runtime+',target=/run/codeship,readonly','--entrypoint','node',manifest.image,'--env-file=/run/app.env','/run/codeship/business-database.mjs',command]);
@@ -175,10 +176,10 @@ try{
    }
    definition.volumes??={};definition.volumes[volume]={external:true,name:volume};dataVolumes.push({type:'volume',source:volume,target:'/opt/codebiz/apps/ecommerce/data'});
   }
-  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],interval:'5s',timeout:'4s',start_period:'20s',retries:30},stop_grace_period:name==='automation'?'120s':'45s'};
+  definition.services[name]={image:manifest.image,container_name:name,init:true,restart:'unless-stopped',security_opt:['no-new-privileges:true'],cap_drop:['ALL'],env_file:[{path:composeEnv,format:'raw'}],environment:{NODE_ENV:'production'},command:['node','/run/codeship/start-business.mjs'],volumes:[{type:'bind',source:runtime,target:'/run/codeship',read_only:true},...dataVolumes],healthcheck:{test:['CMD','node','-e',"fetch('http://127.0.0.1:"+target.apiPort+"/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"],...startupHealth},stop_grace_period:name==='automation'?'120s':'45s'};
   applyIndependentNetwork(definition.services[name],name,topology);
   await stage('private-network','passed',{network:topology.name,address:topology.addresses[name]});
-  await save(composeFile,definition);compose(['config','--quiet']);await stage('replacement','started');compose(['up','-d','--no-build','--wait','--wait-timeout','180',name]);
+  await save(composeFile,definition);compose(['config','--quiet']);await stage('replacement','started');compose(['up','-d','--no-build','--wait','--wait-timeout',String(startupBudget.operationSeconds),name]);
   await verify(manifest.image);docker(['exec','-i','platform','node','scripts/container-release.ts','complete'],JSON.stringify(profile));await stage('platform-admission','passed');await registry(env,manifest.version,true);
   await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile,network:{name:topology.name,address:topology.addresses[name],subnet:topology.subnet}});await stage('release','succeeded');
  }

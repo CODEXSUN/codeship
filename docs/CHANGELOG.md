@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.17
+Current version: 1.0.18
 
-Release tag: v-1.0.17
+Release tag: v-1.0.18
 
-Changelog label: v 1.0.17
+Changelog label: v 1.0.18
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.18
+
+### [v 1.0.18] 2026-11-19 - Align dependency startup health and operation deadlines
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.18.
+- Allow bounded300s PostgreSQL dependency recovery, retaining fatal credentials/schema checks.
+- Align Docker health grace360s and operation wait480s so late dependency recovery leaves child startup and health sampling time.
+- Reuse one policy across Platform and business app runtime/Compose generation; add virtual-time near-deadline regression coverage. No database migration.
 
 ## v-1.0.17
 
