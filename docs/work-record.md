@@ -469,3 +469,5 @@ Preserved earlier port-contract audit separately; source baseline CodeShip1.0.15
 Shared UI0.1.12 exact e88945f101313051ded3557e14b0363a0a6ca906 is published and pinned; framework0.2.0 exact51daaa2a7bee32d0a8eca806a2b0e8a765a3e1ac pinned. Existing isolated network test was stale against its own released private-IP ingress; corrected test to supply and permit only the assigned private address, retaining loopback/namespace checks. Isolated build1.53s and version checks pass.
 
 Isolated CodeShip1.0.16 checks complete:68/68tests pass in23.69s, including disposable PostgreSQL snapshot/startup gate; typecheck passes; final production build1.67s; diff whitespace check passes. No applied migration changes. Publication and immutable image workflow remain next stages; no Docker boot verification claimed.
+
+Source checks published on isolated codex/codeship-startup-1016 branch; immutable tag is created by a separate helper release operation after the source publication. Tag workflow must succeed before any deployment admission.
