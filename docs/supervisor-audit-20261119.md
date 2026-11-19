@@ -1,0 +1,9 @@
+# CodeShip scoped startup release audit — 2026-11-19
+
+Status: release-ready (source checks complete; immutable workflow pending)
+
+Baseline6c31dea CodeShip1.0.15. Isolated1.0.16 adds authenticated read-only PostgreSQL dependency waiting before child launch through framework0.2.0. Only transient recovery/transport errors retry; credentials/schema errors fail closed. Startup deadline180s, max50attempts, delay500ms up to5s, cancellation supported. Tailwind app scanning bounded to src/web; shared styles retained. Existing released private ingress network test corrected to supply its assigned address.
+
+Pins: framework51daaa2a7bee32d0a8eca806a2b0e8a765a3e1ac, UIe88945f101313051ded3557e14b0363a0a6ca906.68/68tests pass23.69s; typecheck passes; build1.67s; whitespace check passes. Real disposable PostgreSQL test validates shared-helper loading and SELECT1 before snapshot verification. Prior primary full suite72/73passed with unavailable fixture; isolated retry is fullygreen.
+
+No migrations, backups, credentials, data or live container changes. Primary app-owner adapter changes preserved outside this scoped release. No coldboot or responsive-browser verification is claimed here. Existing port contract14350:4350 recorded; full port rollout remains app-owned. Tag/commit/workflow/image manifest recorded after publication.

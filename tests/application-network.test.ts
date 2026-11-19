@@ -7,9 +7,9 @@ test('every app owns its network address and published port without sharing Plat
  for(const name of ['platform',...Object.keys(businessTargets)]){
   const service:any=applyIndependentNetwork({network_mode:'service:platform',depends_on:{platform:{restart:true}}},name,topology);
   assert.equal(service.network_mode,undefined);assert.equal(service.depends_on,undefined);assert.equal(service.networks.backend.ipv4_address,addresses[name]);assert.equal(service.ports.length,1);assert.match(service.ports[0],/^127\.0\.0\.1:/);
-  const routes=bridgePlan(name);assert.equal(new Set(routes.map(route=>route.port)).size,routes.length);
+  const routes=bridgePlan(name,addresses[name]);assert.equal(new Set(routes.map(route=>route.port)).size,routes.length);
   assert.equal(routes.filter(route=>route.host==='0.0.0.0').length,name==='platform'?0:1);
-  assert.ok(routes.filter(route=>route.host!=='0.0.0.0').every(route=>route.host==='127.0.0.1'));
+  assert.ok(routes.filter(route=>route.host!=='0.0.0.0').every(route=>route.host==='127.0.0.1'||route.host===addresses[name]));
  }
  for(const subnet of ['10.0.0.0/30','172.30.0.1/16','999.0.0.0/16','::/64'])assert.throws(()=>applicationAddresses(subnet));
 });
