@@ -3,22 +3,25 @@ import {applicationAddresses,applyIndependentNetwork,ensureApplicationNetwork,ve
 import {bridgePlan,createConnectionBridge} from '../.container/apps/runtime-network.mjs';
 import {businessTargets} from '../.container/apps/business-targets.mjs';
 test('every app owns its network address and published port without sharing Platform namespaces',()=>{
- const addresses=applicationAddresses('172.30.0.0/16'),topology={name:'applications_backend',subnet:'172.30.0.0/16',gateway:'172.30.0.1',addresses,peers:''};assert.equal(new Set(Object.values(addresses)).size,9);
+ const addresses=applicationAddresses('172.30.0.0/16'),topology={name:'applications_backend',subnet:'172.30.0.0/16',gateway:'172.30.0.1',addresses,peers:''};assert.equal(new Set(Object.values(addresses)).size,10);
  for(const name of ['platform',...Object.keys(businessTargets)]){
   const service:any=applyIndependentNetwork({network_mode:'service:platform',depends_on:{platform:{restart:true}}},name,topology);
   assert.equal(service.network_mode,undefined);assert.equal(service.depends_on,undefined);assert.equal(service.networks.backend.ipv4_address,addresses[name]);assert.equal(service.ports.length,1);assert.match(service.ports[0],/^127\.0\.0\.1:/);
-  const routes=bridgePlan(name,addresses[name]);assert.equal(new Set(routes.map(route=>route.port)).size,routes.length);
+  const routes=bridgePlan(name,addresses[name]);assert.equal(new Set(routes.map(route=>route.host+':'+route.port)).size,routes.length);
   assert.equal(routes.filter(route=>route.host==='0.0.0.0').length,name==='platform'?0:1);
   assert.ok(routes.filter(route=>route.host!=='0.0.0.0').every(route=>route.host==='127.0.0.1'||route.host===addresses[name]));
+  if(name==='abconnect'){assert.deepEqual(service.ports,['127.0.0.1:14420:4420']);assert.ok(routes.some(route=>route.host===addresses.abconnect&&route.port===4420));}
+  if(name==='billing'){assert.deepEqual(service.ports,['127.0.0.1:14335:4335']);assert.ok(routes.some(route=>route.host===addresses.billing&&route.port===4335));assert.ok(routes.some(route=>route.host==='0.0.0.0'&&route.port===14335));}
  }
  for(const subnet of ['10.0.0.0/30','172.30.0.1/16','999.0.0.0/16','::/64'])assert.throws(()=>applicationAddresses(subnet));
+ for(const address of [undefined,'0.0.0.0','127.0.0.1','invalid'])assert.throws(()=>bridgePlan('billing',address));
 });
 test('verification rejects shared namespaces and ports published on another app container',()=>{
- const facts={networkMode:'applications_backend',networks:{applications_backend:{IPAddress:'172.30.0.11'}},ports:{'14345/tcp':[{HostIp:'127.0.0.1',HostPort:'4454'}]}};
+ const facts={networkMode:'applications_backend',networks:{applications_backend:{IPAddress:'172.30.0.11'}},ports:{'4345/tcp':[{HostIp:'127.0.0.1',HostPort:'14345'}]}};
  verifyIndependentContainer('core-app',facts);
  assert.throws(()=>verifyIndependentContainer('core-app',{...facts,networkMode:'container:platform'}));
  assert.throws(()=>verifyIndependentContainer('core-app',{...facts,ports:{...facts.ports,'14335/tcp':[{HostIp:'127.0.0.1',HostPort:'4455'}]}}));
- assert.throws(()=>verifyIndependentContainer('core-app',{...facts,ports:{'14345/tcp':[{HostIp:'0.0.0.0',HostPort:'4454'}]}}));
+ assert.throws(()=>verifyIndependentContainer('core-app',{...facts,ports:{'4345/tcp':[{HostIp:'0.0.0.0',HostPort:'14345'}]}}));
 });
 test('network ownership and reserved addresses fail closed; PostgreSQL attachment survives recreation',()=>{
  const id='a'.repeat(64),calls:string[][]=[];const network:any={Labels:{'io.codebiz.owner':'codeship'},IPAM:{Config:[{Subnet:'172.30.0.0/16',Gateway:'172.30.0.1'}]},Containers:{}};

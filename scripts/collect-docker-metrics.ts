@@ -1,3 +1,4 @@
+import {isMetricsCollector} from './metrics-process.ts';
 import {mkdir,readFile,writeFile,rename,open,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -11,7 +12,7 @@ import {parseDiskUsage} from './disk-usage.ts';
 const watch=process.argv.includes('--watch');if(process.argv.slice(2).some(a=>!['--watch','--once'].includes(a)))throw new Error('Use --once or --watch.');
 const directory=path.join(appRoot,'.codeship/metrics'),file=path.join(directory,'snapshot.json');await mkdir(directory,{recursive:true,mode:0o700});
 let lock:Awaited<ReturnType<typeof open>>|undefined;const lockFile=path.join(directory,'collector.lock');
-if(watch){try{const prior=Number(await readFile(lockFile,'utf8'));let running=true;try{process.kill(prior,0);}catch{running=false;}if(running)throw new Error('A metrics collector is already running.');await unlink(lockFile);}catch(error){if((error as any).code!=='ENOENT')throw error;}lock=await open(lockFile,'wx',0o600);await lock.writeFile(String(process.pid));}
+if(watch){try{const prior=Number(await readFile(lockFile,'utf8'));const running=await isMetricsCollector(prior);if(running)throw new Error('A metrics collector is already running.');await unlink(lockFile);}catch(error){if((error as any).code!=='ENOENT')throw error;}lock=await open(lockFile,'wx',0o600);await lock.writeFile(String(process.pid));}
 const lines=(text:string)=>text.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
 const number=(value:string)=>{const n=Number.parseFloat(value);return Number.isFinite(n)&&n>=0?n:null;};
 const storageCache=new Map<string,{at:number;data:Awaited<ReturnType<typeof containerStorage>>}>();

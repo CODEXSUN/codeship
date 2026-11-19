@@ -31,7 +31,7 @@ export function applyIndependentNetwork(service,name,topology){
  delete service.network_mode;delete service.depends_on;
  service.networks={backend:{ipv4_address:topology.addresses[name]}};
  const target=businessTargets[name];service.ports=[name==='platform'?'127.0.0.1:'+platformTarget.port+':'+platformTarget.apiPort:'127.0.0.1:'+target.port+':'+target.publishedContainerPort];
- if(name==='crm')service.environment={...service.environment,CODESHIP_CONTAINER_ADDRESS:topology.addresses[name]};
+ if(target)service.environment={...service.environment,CODESHIP_CONTAINER_ADDRESS:topology.addresses[name]};
  return service;
 }
 export function verifyIndependentContainer(name,facts){

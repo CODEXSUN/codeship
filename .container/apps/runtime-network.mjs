@@ -1,3 +1,4 @@
+import {startupBudget} from './startup-budget.mjs';
 import {createRequire,findPackageJSON} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {readFileSync} from 'node:fs';
@@ -32,7 +33,7 @@ export async function startContainerService(name){
  finally{process.removeListener('SIGTERM',cancel);process.removeListener('SIGINT',cancel);}
  const child=spawn(process.execPath,[name==='automation'?'scripts/runtime.ts':'src/api/server.ts'],{stdio:'inherit',env:{...process.env,...(target?{[target.prefix+'_HOST']:'127.0.0.1',[target.prefix+'_PORT']:String(target.apiPort)}:{})}});
  const sockets=new Set(),servers=[];let stopping=false;
-  function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),35000);deadline.unref();}
+  function stop(signal='SIGTERM'){if(stopping)return;stopping=true;for(const server of servers)server.close();for(const socket of sockets)socket.destroy();child.kill(signal);const deadline=setTimeout(()=>child.kill('SIGKILL'),name==='automation'?110000:35000);deadline.unref();}
  for(const route of bridgePlan(name,process.env.CODESHIP_CONTAINER_ADDRESS)){
   const server=createConnectionBridge(route,sockets);servers.push(server);server.on('error',()=>{console.error('Application connection bridge could not start.');process.exitCode=1;stop();});server.listen(route.port,route.host);
  }
@@ -68,5 +69,5 @@ export async function waitForDatabaseDependencies(environment,options={}){
   const fatal=failed.find(result=>!transientDatabaseStartup(result.reason));
   if(fatal)throw fatal.reason;if(failed.length)throw failed[0].reason;
   signal.throwIfAborted();return true;
- },{timeoutMs:180000,maxAttempts:50,initialDelayMs:500,maxDelayMs:5000,retryOnError:transientDatabaseStartup,...options});
+ },{timeoutMs:startupBudget.dependencyMs,maxAttempts:70,initialDelayMs:500,maxDelayMs:5000,retryOnError:transientDatabaseStartup,...options});
 }

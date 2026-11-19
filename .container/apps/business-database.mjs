@@ -16,6 +16,8 @@ else{
   db=(await load('src/api/database/connection.ts')).connectDatabase();runner=(await load('src/api/database/migrations.ts')).migrator(db);
  }else if(target.name==='zetro'){
   db=(await load('src/api/database/connection.ts')).connectDatabase(process.env.ZETRO_DATABASE_URL);runner=(await load('src/api/database/migrations.ts')).migrator(db);
+ }else if(target.name==='abconnect'){
+  db=(await load('src/api/database/connection.ts')).connectDatabase(process.env.ABCONNECT_MIGRATION_DATABASE_URL);runner=(await load('src/api/database/migrations.ts')).migrator(db);
  }else if(target.name==='ecommerce'){
   db=(await load('src/api/database.ts')).openDatabase();
   const migrations={},base=path.join(root,'src/api/modules');

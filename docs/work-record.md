@@ -471,3 +471,17 @@ Shared UI0.1.12 exact e88945f101313051ded3557e14b0363a0a6ca906 is published and 
 Isolated CodeShip1.0.16 checks complete:68/68tests pass in23.69s, including disposable PostgreSQL snapshot/startup gate; typecheck passes; final production build1.67s; diff whitespace check passes. No applied migration changes. Publication and immutable image workflow remain next stages; no Docker boot verification claimed.
 
 Source checks published on isolated codex/codeship-startup-1016 branch; immutable tag is created by a separate helper release operation after the source publication. Tag workflow must succeed before any deployment admission.
+
+
+### 2026-11-19 adapter reconciliation candidate
+
+Preserved primary app-owner work and selectively adopted deployment-only adapters: independent ABConnect provisioning/roles and combined ingress; released Platform production flags; standard hostprefix1 ports for Core/HRMS/Automation/Texlinks and private-IP ingress; browser metadata now points Billing/Core links to14335/14345 while native API URLs remain unchanged. Automation110s drain retained. Manual native-data copying/migration scripts and registry UI edits remain outside this candidate. Texlinks database adoption is explicitly not approved by its port change and its newer database-backed image remains deferred. All adapters require immutable app manifests and actual migration-plan checks. Verification pending.
+
+Reconciled adapter1.0.17 full suite73/73passed in29.22s; typecheck and production build passed. Permanent collector identity validation rejects unrelated/reused PIDs without killing them and conservatively retains a potentially live owner when OS identity is unavailable. No applied migration changes; actual per-app migration plans remain mandatory.
+
+
+### 2026-11-19 startup budget alignment
+
+Observed initial PostgreSQL recovery about187s exceeds previous dependency180s. Follow-up uses shared framework deadline300s/max70attempts, child60s, health60s and operation480s. Docker health grace360s with6retries/5s interval/4s timeout; early healthy apps still complete immediately. Near-deadline arithmetic regression rejects previous180s total budget and proves room for child+health after late database recovery. No database mutation. Verification pending.
+
+Startup budget1.0.18 verification complete:75/75tests pass32.76s, typecheck/build pass; near300s dependency recovery covered with virtual timers and no real multi-minute sleep. Earlier snapshot fixture failure is retained in the primary report; full isolated candidate is green.

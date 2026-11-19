@@ -2,13 +2,44 @@
 
 ## Version State
 
-Current version: 1.0.16
+Current version: 1.0.18
 
-Release tag: v-1.0.16
+Release tag: v-1.0.18
 
-Changelog label: v 1.0.16
+Changelog label: v 1.0.18
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.18
+
+### [v 1.0.18] 2026-11-19 - Align dependency startup health and operation deadlines
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.18.
+- Allow bounded300s PostgreSQL dependency recovery, retaining fatal credentials/schema checks.
+- Align Docker health grace360s and operation wait480s so late dependency recovery leaves child startup and health sampling time.
+- Reuse one policy across Platform and business app runtime/Compose generation; add virtual-time near-deadline regression coverage. No database migration.
+
+## v-1.0.17
+
+### [v 1.0.17] 2026-11-19 - Reconcile isolated app ports and recover reused metrics leases
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.17.
+- Reconcile reviewed app adapters and standard loopback host/container port mappings, retaining private relays and independent production credentials.
+- Render Docker-only Billing/Core browser origins from assigned bindings; preserve native settings.
+- Validate metrics collector process identity so a stale PID reused by a browser cannot block live metrics startup.
+- Preserve applied migrations and require each target history plan before rollout; database adoption is not implied by port updates.
 
 ## v-1.0.16
 

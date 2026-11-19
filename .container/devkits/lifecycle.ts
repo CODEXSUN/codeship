@@ -41,7 +41,7 @@ const compose=(args:string[])=>execute('docker',['compose','--project-name','dev
 const jsonFile=async(file:string)=>JSON.parse(await readFile(file,'utf8'));
 async function save(file:string,value:unknown){await writeFile(file+'.next',JSON.stringify(value,null,2)+'\n',{mode:0o600});await rename(file+'.next',file);}
 let prior:any=existsSync(stateFile)?await jsonFile(stateFile):undefined;
-const ports={codeship:codeshipHostPort,codeitz:4451,uiux:4452},internal={codeship:4350,codeitz:4305,uiux:4315};
+const ports={codeship:codeshipHostPort,codeitz:14305,uiux:14315},internal={codeship:4350,codeitz:4305,uiux:4315};
 const images:Record<string,any>={...(prior?.services??{})};
 const histories:Record<string,any>={};
 let buildContext=workspaceRoot;
