@@ -1,3 +1,4 @@
+import {platformIngressPeers} from './platform-ingress-peers.mjs';
 import {admitPlatformDevkit} from './platform-admission.mjs';
 import {platformDevkitNetwork} from './platform-network.mjs';
 import {createServer} from 'node:net';
@@ -118,8 +119,7 @@ try{
   for(const name of names){sourceRows[name]=existingRows.find(row=>row.owner==='devkit/'+name&&row.environment==='local-docker')??existingRows.find(row=>row.owner==='devkit/'+name);const source=sourceRows[name];settings[name]=source?.encrypted_secrets?currentEnvironment(decryptSecrets(source.public_id,source.encrypted_secrets)):{};}
   const authenticated=selected.filter(name=>settings[name][name.toUpperCase()+'_PLATFORM_AUTH']==='1');
   const platformNetwork=authenticated.length?platformDevkitNetwork(JSON.parse(docker(['network','inspect','applications_backend']))[0]):undefined;
-  const connectorPeers=hostinger?Object.values(network.Containers??{}).filter((row:any)=>['cloudflared','platform'].includes(row.Name)).map((row:any)=>row.IPv4Address.split('/')[0]):[];
-  if(hostinger&&authenticated.length&&connectorPeers.length!==2)throw Error('Resolve the existing tunnel connector and Platform peers.');
+  const ingressPeers:Record<string,string[]>=Object.fromEntries(authenticated.map(name=>[name,hostinger?platformIngressPeers(network,infraNetwork,name):[]]));
   for(const name of authenticated)await stage('platform-admission-'+name,'prepared',await admitPlatformDevkit({action:'prepare',name,release:images[name],settings:settings[name],appRoot,docker}));
   const pgRecord=await db.selectFrom('infrastructure_services').selectAll().where('kind','=','postgres').where('environment','=','local-docker').executeTakeFirstOrThrow();
   const pgSecrets=pgRecord.encrypted_secrets?decryptSecrets(pgRecord.public_id,pgRecord.encrypted_secrets):{};
@@ -223,7 +223,7 @@ try{
     const item=services[name];const original=Array.isArray(item.networks)?Object.fromEntries(item.networks.map(key=>[key,{}])):item.networks??{default:{}};
     item.networks={...original,backend:{ipv4_address:platformNetwork.addresses[name]}};
     item.extra_hosts=['platform:'+platformNetwork.platform];
-    item.environment[name.toUpperCase()+'_DOCKER_PEERS']=[item.environment[name.toUpperCase()+'_DOCKER_PEERS'],platformNetwork.platform,platformNetwork.gateway,...connectorPeers].filter(Boolean).join(',');
+    item.environment[name.toUpperCase()+'_DOCKER_PEERS']=[item.environment[name.toUpperCase()+'_DOCKER_PEERS'],platformNetwork.platform,platformNetwork.gateway,...(ingressPeers[name]??[])].filter(Boolean).join(',');
    }
   }
   if(ubuntuTarget){const used=new Set(Object.values(services).flatMap((s:any)=>(s.volumes??[]).map((v:any)=>typeof v==='string'?v.split(':')[0]:v.type==='volume'?v.source:null)).filter(Boolean));for(const key of Object.keys(definition.volumes))if(!used.has(key))delete (definition.volumes as any)[key];}

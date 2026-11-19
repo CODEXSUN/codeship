@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.23
+Current version: 1.0.24
 
-Release tag: v-1.0.23
+Release tag: v-1.0.24
 
-Changelog label: v 1.0.23
+Changelog label: v 1.0.24
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.24
+
+### [v 1.0.24] 2026-11-19 - Resolve ingress peers on every selected service network
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.24.
+- Resolve the existing tunnel connector IP on each network attached to the selected service. Codeitz can be reached through both its Devkits and infrastructure bridge; other services retain their narrower exact-peer list. No Cloudflare, database, dependency or login UI changes.
 
 ## v-1.0.23
 
