@@ -2,8 +2,7 @@ import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {dockerBrowserOrigins} from './browser-origins.mjs';
 import {prepareAbconnectDatabase,grantAbconnectRuntime} from './abconnect-database.ts';
 import {prepareIilabsDatabase,grantIilabsRuntime} from './iilabs-database.ts';
-import {requireIilabsUbuntuTarget} from './iilabs-target.mjs';
-import {hostname} from 'node:os';
+import {requireIilabsLocalDockerTarget} from './iilabs-target.mjs';
 import {prepareCrmDatabase} from './crm-database.ts';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
@@ -29,7 +28,12 @@ import {migrationDecision} from '../policy.mjs';
 import {ensureMetricsCollector} from '../../scripts/metrics-runtime.ts';
 
 const [mode,name,...args]=process.argv.slice(2),target=businessTarget(name);
-if(name==='iilabs')requireIilabsUbuntuTarget(JSON.parse(await readFile('/srv/codebiz/target.json','utf8')),{platform:process.platform,hostname:hostname(),appRoot,stateRoot:realpathSync(path.join(appRoot,'.codeship'))});
+if(name==='iilabs'){
+ const context=spawnSync('docker',['context','show'],{encoding:'utf8',timeout:10000,windowsHide:true});
+ const endpoint=spawnSync('docker',['context','inspect','desktop-linux','--format','{{.Endpoints.docker.Host}}'],{encoding:'utf8',timeout:10000,windowsHide:true});
+ if(context.status!==0||endpoint.status!==0)throw Error('Cannot verify the local Docker target.');
+ requireIilabsLocalDockerTarget({platform:process.platform,appRoot,stateRoot:realpathSync(path.join(appRoot,'.codeship')),dockerContext:context.stdout.trim(),dockerEndpoint:endpoint.stdout.trim()});
+}
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||!['setup','update','verify'].includes(mode))throw Error('Use the CodeShip application shell entry.');
 const resumeSetup=mode==='setup'&&name==='abconnect'&&args.length===3&&args[2]==='--resume';
 if(mode!=='verify'&&((args.length!==2&&!resumeSetup)||args[0]!=='--release-set'))throw Error('Supply an explicit approved release set.');
