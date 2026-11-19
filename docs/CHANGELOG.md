@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.24
+Current version: 1.0.25
 
-Release tag: v-1.0.24
+Release tag: v-1.0.25
 
-Changelog label: v 1.0.24
+Changelog label: v 1.0.25
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.25
+
+### [v 1.0.25] 2026-11-19 - Keep existing native and Docker login sessions independent
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.25.
+- Pin SDK0.1.9 cookie selection so native and Docker sessions can coexist in one browser. Preserve existing login UI, API paths, dependencies other than SDK, permissions and databases. Duplicate cookies for the expected transport remain rejected.
 
 ## v-1.0.24
 

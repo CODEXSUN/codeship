@@ -538,3 +538,7 @@ CodeShip1.0.22 UI/auth source tag succeeded but was not deployed. Final1.0.23 ad
 ### 2026-11-20 ingress peer correction
 
 CodeShip1.0.23 verified on VPS with original login, fresh metrics, CSRF/origin rejection, logout revocation and non-SA denial. Codeitz1.0.13 private admission succeeded but public requests failed closed because the existing connector can reach it over cxapp-network as well as devkits_default.1.0.24 resolves exact source peers only on selected attached networks; no connector/DNS/Cloudflare modification. Regression covers both paths and excludes unrelated peers. LocalPlatform transport compatibility patch is separately pending, with prior working local settings restored. No DB reset/migration or unrelated service changes.
+
+### 2026-11-20 native/Docker cookie compatibility
+
+SDK0.1.9/1ac4441efc2280c89f3348f5f51fc03ca6e57907 selects the expected host/deployment cookie rather than rejecting an unrelated native/Docker cookie. Twenty SDK tests pass. App dependency pin updated; UI and API behavior otherwise unchanged. No migration. User explicitly reaffirmed that this chat should continue local and VPS deployment despite another chat reporting a local-only hold. Final matching verification pending.

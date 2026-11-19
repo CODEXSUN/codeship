@@ -1,5 +1,5 @@
-# CodeShip 1.0.24
+# codeship 1.0.25
 
-Preserve selected update/login wiring from1.0.23 and resolve the existing ingress connector on every network shared with that service. Codeitz has both Devkits and infrastructure attachments; either connector source IP must be explicitly allowed. Other devkits retain their narrower peer list. No Cloudflare configuration, dependency, UI or database migration change.
+Original shared Platform login with SDK0.1.9. Native and Docker sessions on one browser host remain independent; another transport cookie grants no authority, and duplicate expected cookies fail closed. Existing exact origins/peers, fixed tenant, CSRF, permissions and direct API/stream routes remain unchanged.
 
-Regression verifies both connector addresses, excludes unrelated endpoints, and fails closed on missing peers. TaggedCI and matching deployment pending.
+SDK20 tests pass, including coexistence; prior app checks passed. TaggedCI reruns app validation. No database migration or Cloudflare changes. Matching local/VPS verification pending.
