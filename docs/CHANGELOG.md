@@ -2,13 +2,29 @@
 
 ## Version State
 
-Current version: 1.0.19
+Current version: 1.0.20
 
-Release tag: v-1.0.19
+Release tag: v-1.0.20
 
-Changelog label: v 1.0.19
+Changelog label: v 1.0.20
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.20
+
+### [v 1.0.20] 2026-11-19 - Live bounded container logs on metric details
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.20.
+- Add compact live container logs to metric show pages for Applications, Devkits and Infrastructure, with a fixed288px shared slim scroll area, pause/resume, manual refresh, copy and follow-latest controls.
+- Host collector independently samples bounded timestamped stdout/stderr tails for registered containers, redacts known registry/Docker credentials and common secret patterns before writing a read-only cache. No Docker socket or host execution added to the application container.
+- Selected-ID/category API uses existing Host/Origin policy, no-store responses and stale/malformed fail-closed behavior. Logs limited to100recent Docker entries/24,000characters per container, max100registered containers.
+- No database migration. CodeShip-only deployment; sibling applications preserved.
 
 ## v-1.0.19
 

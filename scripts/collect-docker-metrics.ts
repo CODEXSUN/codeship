@@ -1,3 +1,4 @@
+import {collectContainerLogs} from './container-logs.ts';
 import {isMetricsCollector} from './metrics-process.ts';
 import {mkdir,readFile,writeFile,rename,open,unlink} from 'node:fs/promises';
 import path from 'node:path';
@@ -16,6 +17,7 @@ if(watch){try{const prior=Number(await readFile(lockFile,'utf8'));const running=
 const lines=(text:string)=>text.trim().split('\n').filter(Boolean).map(line=>JSON.parse(line));
 const number=(value:string)=>{const n=Number.parseFloat(value);return Number.isFinite(n)&&n>=0?n:null;};
 const storageCache=new Map<string,{at:number;data:Awaited<ReturnType<typeof containerStorage>>}>();
+let logTargets:{ID:string;category:import('../contracts/docker-metrics.ts').MetricCategory}[]=[];
 async function collect(){
  let snapshot:DockerMetricSnapshot;
  try{
@@ -23,6 +25,7 @@ async function collect(){
   let group:{project:string;services:{key:string}[]}|undefined;try{group=JSON.parse(await readFile(path.join(appRoot,'.codeship/infrastructure-runtime/group.json'),'utf8'));}catch{}
   const listed=lines(await docker(['ps','-a','--format','{{json .}}']));
   const selected=listed.flatMap(row=>{const labels=Object.fromEntries(String(row.Labels??'').split(',').map(v=>{const i=v.indexOf('=');return [v.slice(0,i),v.slice(i+1)];}));const project=labels['com.docker.compose.project']??'',service=labels['com.docker.compose.service']??'';const scope=metricCategory(project,service,applications,infrastructure,group);return scope&&/^[a-f0-9]{12,64}$/.test(row.ID)?[{...row,...scope,project,service}]:[];});
+  logTargets=selected;
   const ids=selected.filter(r=>r.State==='running').map(r=>r.ID);
   const stats=ids.length?lines(await docker(['stats','--no-stream','--format','{{json .}}',...ids])):[];
   let engine:DockerMetricSnapshot['engine'];try{engine=JSON.parse(await docker(['info','--format','{"cpus":{{.NCPU}},"memoryBytes":{{.MemTotal}}}']));}catch{}
@@ -45,4 +48,6 @@ async function collect(){
  console.log(JSON.stringify({at:snapshot.collectedAt,available:snapshot.available,containers:snapshot.containers.length}));
 }
 let stopped=false;process.on('SIGINT',()=>{stopped=true;});process.on('SIGTERM',()=>{stopped=true;});
-try{do{await collect();if(!watch)break;await new Promise(resolve=>setTimeout(resolve,5000));}while(!stopped);}finally{if(lock){await lock.close();await unlink(lockFile);}}
+async function metricsLoop(){do{await collect();if(!watch)break;await new Promise(resolve=>setTimeout(resolve,5000));}while(!stopped);}
+async function logsLoop(){do{if(logTargets.length)try{await collectContainerLogs(logTargets,directory);}catch{console.error('[codeship] Container log sampling unavailable.');}if(!watch)break;await new Promise(resolve=>setTimeout(resolve,5000));}while(!stopped);}
+try{if(watch)await Promise.all([metricsLoop(),logsLoop()]);else{await metricsLoop();await logsLoop();}}finally{if(lock){await lock.close();await unlink(lockFile);}}
