@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.34
+Current version: 1.0.35
 
-Release tag: v-1.0.34
+Release tag: v-1.0.35
 
-Changelog label: v 1.0.34
+Changelog label: v 1.0.35
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.35
+
+### [v 1.0.35] 2026-11-20 - Fix public ACME challenge directory permissions
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.35.
+- Explicitly set public traversal permissions on every ACME webroot parent while retaining private recovery permissions; run Certbot under its public challenge umask.
+- Local Nginx Docker reproduced403 with a private parent and returned200 after the correction. Previous ingress restored automatically after failed certificate admission.
 
 ## v-1.0.34
 

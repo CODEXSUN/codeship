@@ -37,7 +37,9 @@ rollback() {
 }
 trap rollback EXIT
 trap 'exit 1' HUP INT TERM
-install -d -m 755 /var/lib/letsencrypt/.well-known/acme-challenge
+# Set every public parent explicitly: install -d applies its mode only to the
+# final directory; the private recovery umask must not hide .well-known.
+install -d -m 755 /var/lib/letsencrypt /var/lib/letsencrypt/.well-known /var/lib/letsencrypt/.well-known/acme-challenge
 if [ ! -f /etc/letsencrypt/live/iilabs.in/fullchain.pem ]; then
     install -m 644 "$base/http.conf" "$dest"
     nginx -t
@@ -45,7 +47,7 @@ if [ ! -f /etc/letsencrypt/live/iilabs.in/fullchain.pem ]; then
     # Existing account only: no new account or implicit terms acceptance.
     accounts=$(find /etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org/directory -mindepth 1 -maxdepth 1 -type d | wc -l)
     [ "$accounts" -eq 1 ] || { echo 'Exactly one existing ACME account required.' >&2; exit 1; }
-    certbot certonly --non-interactive --webroot -w /var/lib/letsencrypt --cert-name iilabs.in -d iilabs.in --deploy-hook 'nginx -t && systemctl reload nginx'
+    (umask 022; certbot certonly --non-interactive --webroot -w /var/lib/letsencrypt --cert-name iilabs.in -d iilabs.in --deploy-hook 'nginx -t && systemctl reload nginx')
 fi
 install -m 644 "$base/https.conf" "$dest"
 nginx -t
