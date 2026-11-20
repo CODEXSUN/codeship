@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.35
+Current version: 1.0.36
 
-Release tag: v-1.0.35
+Release tag: v-1.0.36
 
-Changelog label: v 1.0.35
+Changelog label: v 1.0.36
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.36
+
+### [v 1.0.36] 2026-11-20 - Wait for reloaded ingress TLS workers
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.36.
+- Added bounded transport retries to ingress admission because Nginx reload returns before replacement TLS workers are ready.
+- Retains existing certificate and prior configuration on failure; does not install an application.
 
 ## v-1.0.35
 

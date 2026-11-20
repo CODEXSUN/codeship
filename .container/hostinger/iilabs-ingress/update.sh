@@ -52,7 +52,7 @@ fi
 install -m 644 "$base/https.conf" "$dest"
 nginx -t
 systemctl reload nginx
-code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --resolve iilabs.in:443:127.0.0.1 https://iilabs.in/)
+code=$(curl --retry 5 --retry-all-errors --retry-delay 1 --max-time 10 --silent --show-error --output /dev/null --write-out '%{http_code}' --resolve iilabs.in:443:127.0.0.1 https://iilabs.in/)
 case "$code" in 2??|3??|401|403|503) ;; *) echo "Unexpected ingress status: $code" >&2; exit 1;; esac
 printf 'release=%s\nhttp_status=%s\nrecovery=%s\n' "$(git -C "$root" describe --exact-match HEAD)" "$code" "$recovery" > "$recovery/result.txt"
 echo "IILabs HTTPS ingress installed; HTTP $code; recovery $recovery"

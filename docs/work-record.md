@@ -660,3 +660,9 @@ Local Docker Nginx 1.28.3: HTTP and HTTPS nginx -t passed; HTTPS unavailable ups
 ### IILabs ingress34 admission failure and local correction
 
 Published34/db18a33c8560843a2d62dd0ee9e15957145fa48d passed CI44763824089. Its released VPS update failed ACME authorization403 and automatically restored the prior absent site. Recovery: /home/codebiz/.deployment/recovery/iilabs-ingress/20261120T153304Z-1429743. Bounded permission inventory found /var/lib/letsencrypt/.well-known was0700: installer private umask affected an intermediate parent. No app containers or other sites changed. Returned to local source; explicitly set every public parent0755 and run Certbot with022 umask. Local Nginx Docker reproduced403 before correction and200/acme-ok after correction. Shell syntax passed and test container removed. Retry awaits successful35 release; no direct VPS patch performed.
+
+### Ingress35 certificate issued; admission race
+
+Release35/ac41eca3bfe06eacfac45deb4983500389640aba passed CI44764589679. Released update obtained iilabs.in certificate expiring2027-02-18 with saved renewal hook/timer. Immediate TLS admission encountered unrecognized-name during asynchronous Nginx worker reload and restored prior absent site. Certificate retained; recovery /home/codebiz/.deployment/recovery/iilabs-ingress/20261120T153719Z-1458280. Source-only correction adds bounded curl transport retries after reload; no live host patch. Application remains absent.
+
+Local admission retry fixture started the Nginx container after a two-second delay. Curl transport retries tolerated initial connection refusal and completed with503 from the selected HTTPS route. Test container removed; certificate fixture retained outside source. No VPS test/build/patch used.
