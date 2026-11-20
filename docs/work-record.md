@@ -546,3 +546,7 @@ SDK0.1.9/1ac4441efc2280c89f3348f5f51fc03ca6e57907 selects the expected host/depl
 ### 2026-11-20 VPS logo repair
 
 Login referenced absent /logo/logo.svg and logo-dark.svg. Reuse existing appBrand imported SVG assets so Vite bundles light/dark URLs and release image includes them. No shared component fork, auth/dependency/schema change. VPS-only release/deployment authorized; local Docker and Cloudflare untouched. Verification pending tagged build/deployment.
+
+### 2026-11-20 tenant to SA explicit login
+
+User reproduced denial after tenant login then opening /sa/login. Existing authorized SA passed VPS workspace verification in both user and SA realms; no grant repair needed. Explicit login URL previously reused tenant cookie and failed workspace verification with no fresh login form. App route adapter now requests credentials via original shared gate, sends route realm, preserves old cookie on failed credentials, and returns to / after successful login. Server permission checks unchanged; ordinary pages retain original session flow. Three route tests/typecheck passed. VPS-only release verification pending; no local Docker/Cloudflare changes.

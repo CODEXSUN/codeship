@@ -2,13 +2,26 @@
 
 ## Version State
 
-Current version: 1.0.26
+Current version: 1.0.27
 
-Release tag: v-1.0.26
+Release tag: v-1.0.27
 
-Changelog label: v 1.0.26
+Changelog label: v 1.0.27
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.27
+
+### [v 1.0.27] 2026-11-19 - Allow explicit SA sign-in after a tenant session
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.27.
+- Explicit /sa/login, /admin/login and /login show the original shared form instead of reusing an existing denied session. Submit the requested realm, preserve the old session on failed credentials, and return to the dashboard after successful login. Existing authoritative workspace permission verification remains unchanged.
 
 ## v-1.0.26
 
