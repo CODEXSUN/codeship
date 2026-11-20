@@ -4,7 +4,7 @@ User authorized completing script/Dockerfile/Compose automation and verifying se
 
 | Order | Product | State | Dependency / current next action |
 | --- | --- | --- | --- |
-| 1 | Platform | blocked / recovery running | Hostinger13→16 stopped at legacy identity preservation gate; old13 stopped. Local recovery script proof and populated-identity adapter in progress; no dependent deployment |
+| 1 | Platform | running; forward update pending | Old13 availability recovered through published30 with exact proof/readiness passed. Locally verified historical proof adapter being integrated before16 retry; no dependent deployment |
 | 2 | Core App | pending | Platform; fresh PostgreSQL target adapter |
 | 3 | Billing | pending | Platform + Core App |
 | 4 | CRM | pending | Platform + legacy MariaDB compatibility; fresh target adapter needed |
@@ -26,3 +26,5 @@ Local workers handle isolated proofs and script changes only. Deployment remains
 ## Platform actual update outcome
 
 Tooling1.0.29 CI44693750557 succeeded. Hostinger run2026-11-20T07-21-21-112Z verified both scoped backups offhost, then immutable16 migration refused missing historical tenant-copy metadata. Old13 container stopped; successful13 state/image/config unchanged. No migration-success or replacement, no direct repair. Protected master/tenant dumps and recovery references recorded in docs/work-record.md. Actual-backup local repro confirmed missing metadata, preserved current credentials and verified all3historical proof digests. Explicit released-script prior-service recovery and forward populated-identity tests remain running. No later app deployed.
+
+Platform prior-service recovery30 passed: old13 running/verified through released updater only, samecontainer/siblings preserved, bothscopes unchanged, no data restore/schema migration. Forward16 adapter in progress.

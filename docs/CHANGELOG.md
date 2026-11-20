@@ -2,13 +2,30 @@
 
 ## Version State
 
-Current version: 1.0.31
+Current version: 1.0.32
 
-Release tag: v-1.0.31
+Release tag: v-1.0.32
 
-Changelog label: v 1.0.31
+Changelog label: v 1.0.32
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.32
+
+### [v 1.0.32] 2026-11-20 - Preserve historical identity proof during checked Platform migration
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.32.
+- Add an explicit reviewed Platform16 historical-preservation path, bounded credential-free metadata transport and exact immutable-image admission.
+- Independently restore the current master backup locally and obtain its legacy snapshot through the approved image’s original export; bind the attestation to the scoped SHA before the immutable migration.
+- Insert only the three matching historical metadata records, preserve current tenant identities/credentials/roles, and use official retirement authorization/provider/history.
+- Adapt the fresh installation payload for the retired master schema while retaining the original private input; reject sessions/business tables before provisioning.
+- No changed application migration, public exposure, new deployment lock, direct VPS repair or credential overwrite.
 
 ## v-1.0.31
 

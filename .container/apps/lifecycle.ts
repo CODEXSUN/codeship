@@ -1,4 +1,4 @@
-import {assertPlatformRetirementPreflight,platformRetirementProbeCode} from './platform-retirement-preflight.mjs';
+import {assertPlatformRetirementPreflight,platformRetirementProbeCode,parseHistoricalIdentityMetadata} from './platform-retirement-preflight.mjs';
 import {probePlatformRuntime,platformRuntimeProbeSettings} from './platform-runtime-probe.mjs';
 import {preparePlatformReleaseAttempt,markPlatformAttemptReplaced,validatePlatformResume,validatePlatformResumeMigrations,completePlatformReleaseAttempt,type PlatformReleaseAttempt} from './platform-release-attempt.mjs';
 import {updateDecision} from '../latest-release.mjs';
@@ -12,7 +12,7 @@ import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {securePlatformRuntime} from './platform-runtime.mjs';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {spawnSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,rename,copyFile,chown,chmod} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,copyFile,chown,chmod,lstat} from 'node:fs/promises';
 import {existsSync,realpathSync} from 'node:fs';
 import {createHash,randomBytes} from 'node:crypto';
 import {parseEnv} from 'node:util';
@@ -37,7 +37,8 @@ const [mode,name,...args]=process.argv.slice(2);
 if(name!=='platform'){await import('./business-lifecycle.ts');process.exit(process.exitCode??0);}
 if(process.env.CODESHIP_APP_SCRIPT_ENTRY!=='1'||name!=='platform'||!['setup','update','verify'].includes(mode))throw new Error('Use the CodeShip apps setup/update/verify shell entry.');
 const resumeId=mode==='update'&&args.length===4&&args[2]==='--resume'?args[3]:undefined;
-if(mode==='verify'?args.length!==0:args[0]!=='--release-set'||!args[1]||args.length!==(resumeId?4:2))throw new Error('Supply --release-set file [--resume operation-id] for an explicit update.');
+const preservationFile=mode==='update'&&args.length===4&&args[2]==='--preserve-identity'?args[3]:undefined;
+if(mode==='verify'?args.length!==0:args[0]!=='--release-set'||!args[1]||args.length!==((resumeId||preservationFile)?4:2))throw new Error('Supply --release-set file [--resume operation-id] for an explicit update.');
 const operationRoot=realpathSync(path.join(appRoot,'.codeship'));
 const targetFile=path.join(operationRoot,'target.json');
 const target=existsSync(targetFile)?JSON.parse(await readFile(targetFile,'utf8')):undefined;
@@ -72,6 +73,14 @@ try {
   if(set.schema!==1||set.source!=='github'||!manifest)throw new Error('Approved Platform release missing.');
   validateManifest(manifest,{owner:'apps/platform',repository:'CODEXSUN/platform',tag:manifest.tag,commit:manifest.commit});
   const approvedManifest=structuredClone(manifest);
+  let preservation:any;
+  if(preservationFile){
+   const stat=await lstat(preservationFile);
+   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>8192||hostinger&&!realpathSync(preservationFile).startsWith(path.join(operationRoot,'devkits/approved')+path.sep)||manifest.version!=='1.0.16'||manifest.imageId!=='sha256:c6e5272c0d3c0bebd0dee73a5436728f1aa3012672e81d90887d6f958cb0aa11')throw Error('Historical preservation requires the reviewed immutable Platform16 boundary and bounded private input');
+   preservation=JSON.parse(await readFile(preservationFile,'utf8'));parseHistoricalIdentityMetadata(preservation.historicalMetadata);
+   if(Object.keys(preservation).sort().join(',')!=='historicalMetadata,historicalMetadataSha256'||createHash('sha256').update(JSON.stringify(preservation.historicalMetadata)).digest('hex')!==preservation.historicalMetadataSha256)throw Error('Historical preservation envelope changed');
+   if(hostinger&&preservation.historicalMetadataSha256!=='4e06f1a26fa19f3edb645c8c4ae3054528d58dc1b6eb7ab500e79032da83f74c')throw Error('Hostinger preservation metadata is not the independently verified historical record');
+  }
   if(resumeId){
    const proof=()=>validatePlatformResume({directory:attemptDirectory,resumeId,approvedManifest,...attemptFiles,actualImageId:docker(['inspect','platform','--format','{{.Image}}'])});
    activeAttempt=await proof();
@@ -113,7 +122,7 @@ try {
   const admin=new pg.Client(adminConfig);await admin.connect();
   try{
    if(!existsSync(markerFile)&&hostinger){
-    await prepareFreshPlatform({admin,env,root,privateRoot,envFile,markerFile,image:manifest.image,docker,stage});
+    await prepareFreshPlatform({admin,env,root,privateRoot,envFile,markerFile,image:manifest.image,masterIdentityRetired:Object.keys(manifest.migrations).some(file=>file.endsWith('/20261120000000_retire_master_identity.ts')),docker,stage});
    }else if(!existsSync(markerFile)){
     const source=nativeSettings??parseEnv(await readFile(path.join(workspaceRoot,'apps/platform/.env'),'utf8'));
     platformRegistration(source,manifest.version); // Validate registry fields before any target provisioning.
@@ -177,14 +186,32 @@ try {
     const registrations=(await master.query('SELECT d.database_name,d.connection_secret_ref,t.public_id FROM public.tenant_databases d JOIN public.tenants t ON t.id=d.tenant_id WHERE d.active AND t.active')).rows;recoveryScopes=platformRecoveryScopes(plans,registrations,JSON.parse(await readFile(markerFile,'utf8')),env);
    }finally{await master.end();}
   }
-  assertPlatformRetirementPreflight(plans,()=>JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','--input-type=module','-e',platformRetirementProbeCode])));
+  assertPlatformRetirementPreflight(plans,()=>JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','--input-type=module','-e',platformRetirementProbeCode])),preservation);
   await stage('identity-retirement-preflight','passed');
-  await applyPlatformMigration({decision:{migrateRequired:pending.length>0,pending},installed:!!prior,requireOffhost:hostinger,requireChannel:requireRecoveryChannel,scopes:recoveryScopes,
+  let retirementRecovery:any;
+  await applyPlatformMigration({decision:{migrateRequired:pending.length>0,pending},installed:!!prior,requireOffhost:hostinger||!!preservation,requireChannel:requireRecoveryChannel,scopes:recoveryScopes,
    quiesce:async()=>{docker(['stop','platform']);},
    backup:async scope=>{const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);const file=path.join(privateRoot,scope.database+'-before-'+run+'.dump');execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',file],undefined,connectionEnv(target.href));return {file,sha256:createHash('sha256').update(await readFile(file)).digest('hex')};},
    checkBackup:async snapshot=>{execute(path.join(bin,'pg_restore'),['--list',snapshot.file]);if(createHash('sha256').update(await readFile(snapshot.file)).digest('hex')!==snapshot.sha256)throw Error('Platform recovery archive changed.');},
-   authorizeRecovery:async snapshot=>requestOffhostRecovery({kind:'postgresql',service:'platform',file:snapshot.file,sha256:snapshot.sha256}),
-   migrate:async()=>{dbTool('migrate');},record:stage});
+   authorizeRecovery:async snapshot=>{
+    const identity=!!preservation&&snapshot.scope.scope==='master';
+    const proof=await requestOffhostRecovery({kind:'postgresql',service:'platform',file:snapshot.file,sha256:snapshot.sha256,...(identity?{scope:'master',database:snapshot.scope.database,requireIdentityRetirementProof:true,candidateImageId:manifest.imageId}:{})});
+    if(identity){
+     const keys=['users','user_credentials','sessions','tenant_memberships','platform_operators'];
+     if(proof.offHostRestoreVerified!==true||proof.sha256!==snapshot.sha256||!/^[a-f0-9]{64}$/.test(proof.legacyDigest??'')||!proof.legacyCounts||Object.keys(proof.legacyCounts).sort().join(',')!==keys.sort().join(',')||keys.some(key=>!Number.isSafeInteger(proof.legacyCounts[key])||proof.legacyCounts[key]<0))throw Error('Independent restored master identity attestation missing');
+     retirementRecovery={file:snapshot.file,backupSha256:snapshot.sha256,restoredLegacyDigest:proof.legacyDigest,offHostRestoreVerified:true};
+    }
+    return proof;
+   },
+   migrate:async()=>{
+    if(preservation){
+     if(!retirementRecovery||createHash('sha256').update(await readFile(retirementRecovery.file)).digest('hex')!==retirementRecovery.backupSha256)throw Error('Checked master recovery archive changed before retirement');
+     const output=docker(['run','--rm','-i','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly',...['platform-identity-retirement.mjs','platform-identity-retirement-cli.mjs'].flatMap(file=>['--mount','type=bind,source='+path.join(appRoot,'.container/apps',file)+',target=/opt/codebiz/apps/platform/.codeship-release/'+file+',readonly']),'--entrypoint','node',manifest.image,'--env-file=/run/platform.env','/opt/codebiz/apps/platform/.codeship-release/platform-identity-retirement-cli.mjs'],JSON.stringify({...preservation,backupSha256:retirementRecovery.backupSha256,restoredLegacyDigest:retirementRecovery.restoredLegacyDigest,offHostRestoreVerified:true}));
+     const result=JSON.parse(output);if(result.officialRetirementApplied!==true||result.tenantIdentitiesCredentialsRolesPreserved!==true||result.officialRetirementAuditMatches!==true||result.verifiedMemberships!==3)throw Error('Official identity preservation result incomplete');
+     await stage('historical-identity-preservation','passed',{inserted:result.historicalProofsInserted,verifiedMemberships:result.verifiedMemberships,credentialsRolesPreserved:true});
+    }
+    dbTool('migrate');
+   },record:stage});
   if(env.PLATFORM_ENTRY_BINDINGS&&!hostinger){const supported=docker(['run','--rm','--network','none','--entrypoint','node',manifest.image,'-e',"console.log(require('node:fs').existsSync('scripts/configure-local-entry.ts')?'supported':'legacy')"]);if(supported==='supported'){docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','scripts/configure-local-entry.ts']);await stage('local-entry-hosts','passed');}else await stage('local-entry-hosts','skipped',{reason:'Released image has no optional entry adapter; retain settings without claiming host configuration'});}
   const topology=ensureApplicationNetwork(docker,hostinger?'cxapp-postgres':'codebiz-infra');
   const ingress=hostinger?JSON.parse(docker(['network','inspect','devkits_default']))[0]:undefined;

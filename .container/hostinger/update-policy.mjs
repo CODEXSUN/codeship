@@ -1,6 +1,15 @@
+import {createHash} from 'node:crypto';
+import {parseHistoricalIdentityMetadata} from '../apps/platform-retirement-preflight.mjs';
+import {platformRetirementImage} from './platform-retirement-recovery.mjs';
 import {product} from '../product.mjs';
 import {validateManifest} from '../release-policy.mjs';
 import {validReleaseAssetUrl} from '../latest-release.mjs';
+export function validateIdentityPreservation(value){
+ if(!value||Object.keys(value).some(key=>!['historicalMetadata','historicalMetadataSha256'].includes(key)))throw Error('Invalid identity preservation envelope');
+ parseHistoricalIdentityMetadata(value.historicalMetadata);
+ if(!/^[a-f0-9]{64}$/.test(value.historicalMetadataSha256??'')||createHash('sha256').update(JSON.stringify(value.historicalMetadata)).digest('hex')!==value.historicalMetadataSha256)throw Error('Historical identity metadata provenance differs');
+ return value;
+}
 export function validatePriorRecoveryProof(proof){
  const sha=/^[a-f0-9]{64}$/;
  if(!proof||proof.schema!==1||Object.keys(proof).some(key=>!['schema','failedRun','baseline'].includes(key))||!/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/.test(proof.failedRun??'')||!Array.isArray(proof.baseline)||proof.baseline.length<2||proof.baseline.length>100)throw Error('Invalid prior recovery proof');
@@ -13,15 +22,17 @@ export function validatePriorRecoveryProof(proof){
 export function parseSelectedUpdateArguments(name,args){
  product(name);const flags=[...args];const take=flag=>{const index=flags.indexOf(flag);if(index<0)return undefined;const value=flags[index+1];if(!value||value.startsWith('--')||flags.indexOf(flag,index+1)>=0)throw Error('Invalid '+flag+' option');flags.splice(index,2);return value;};
  const setup=flags.includes('--setup');if(setup){flags.splice(flags.indexOf('--setup'),1);if(flags.includes('--setup'))throw Error('Duplicate setup option');}
- const action=setup?'setup':'update',releaseTag=take('--tag'),resumeId=take('--resume'),priorRecoveryFile=take('--recover-prior');
+ const action=setup?'setup':'update',releaseTag=take('--tag'),resumeId=take('--resume'),priorRecoveryFile=take('--recover-prior'),preserveIdentityFile=take('--preserve-identity');
+ if(preserveIdentityFile&&(name!=='platform'||action!=='update'||resumeId||priorRecoveryFile))throw Error('Identity preservation is only a Platform update without resume or prior recovery');
  if(priorRecoveryFile&&(name!=='platform'||action!=='update'||resumeId||!releaseTag))throw Error('Prior recovery requires Platform update with its explicit prior --tag and no resume');
  const [mode,id]=flags;
- if(releaseTag&&['--receive','--export-recovery'].includes(mode)||priorRecoveryFile&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
+ if((releaseTag||priorRecoveryFile||preserveIdentityFile)&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
  if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
- return {action,releaseTag,resumeId,priorRecoveryFile,mode,id};
+ return {action,releaseTag,resumeId,priorRecoveryFile,mode,id,...(preserveIdentityFile?{preserveIdentityFile}:{})};
 }
 export function validateUpdateTicket(ticket,name){
  const descriptor=product(name);
+ if(ticket.preserveIdentity!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined||ticket.priorRecovery!==undefined)throw Error('Identity preservation is restricted to a Platform update');validateIdentityPreservation(ticket.preserveIdentity);if(ticket.manifest?.version!=='1.0.16'||ticket.manifest.imageId!==platformRetirementImage)throw Error('Identity preservation requires the verified Platform16 release');}
  if(ticket.priorRecovery!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined)throw Error('Prior recovery is restricted to an explicit Platform update');validatePriorRecoveryProof(ticket.priorRecovery);}
  if(ticket.resumeId!==undefined&&((ticket.action??'update')!=='update'||name!=='platform'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(ticket.resumeId)))throw Error('Invalid recorded resume operation');
  if(!['setup','update'].includes(ticket.action??'update'))throw Error('Invalid deployment action');

@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import cp from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {latestRelease,updateDecision} from '../latest-release.mjs';
-import {validateUpdateTicket,remoteUpdateCommand,validatePriorRecoveryProof,parseSelectedUpdateArguments} from './update-policy.mjs';
+import {validateUpdateTicket,remoteUpdateCommand,validatePriorRecoveryProof,parseSelectedUpdateArguments,validateIdentityPreservation} from './update-policy.mjs';
 import {assertCleanCheckout} from './clean-checkout.mjs';
 import readline from 'node:readline';
 import {runLifecycleWithRecovery,exportRecovery} from './recovery-channel.mjs';
@@ -58,7 +58,9 @@ export async function receiveUpdate(name,ticket,approve){
   if(code!==0)throw Error('Prior Platform runtime recovery stopped; fix locally');
   console.log('platform: prior '+ticket.manifest.version+' availability restored without migration or data restore');return;
  }
- await runLifecycleWithRecovery({name,ticket,env,root,releaseSetFile,approve});
+ let preserveIdentityFile;
+ if(ticket.preserveIdentity){preserveIdentityFile=path.join(approved,'platform-preserve-identity-'+randomUUID()+'.json');fs.writeFileSync(preserveIdentityFile,JSON.stringify(ticket.preserveIdentity),{mode:0o600,flag:'wx'});}
+ await runLifecycleWithRecovery({name,ticket,env,root,releaseSetFile,preserveIdentityFile,approve});
  console.log(name+': updated to '+ticket.manifest.version+' using published tooling '+ticket.tooling.version);
 }
 async function sendUpdate(name,ticket){
@@ -71,7 +73,7 @@ async function sendUpdate(name,ticket){
   if(!line.startsWith('CODESHIP_RECOVERY:')){console.log(line);return;}
   handling=handling.then(async()=>{
    const request=JSON.parse(line.slice('CODESHIP_RECOVERY:'.length));
-   try{console.log(name+': verifying recovery in isolated local Docker');const proof=await saveAndVerifyRecovery(request);child.stdin.write(JSON.stringify({id:request.id,...proof})+'\n');}
+   try{console.log(name+': verifying recovery in isolated local Docker');const proof=await saveAndVerifyRecovery(request,ticket.manifest);child.stdin.write(JSON.stringify({id:request.id,...proof})+'\n');}
    catch{child.stdin.write(JSON.stringify({id:request.id,offHostRestoreVerified:false})+'\n');}
   });
  });
@@ -80,7 +82,7 @@ async function sendUpdate(name,ticket){
 }
 async function main(){
  const [name,...args]=process.argv.slice(2);product(name);
- const {action,releaseTag,resumeId,priorRecoveryFile,mode,id}=parseSelectedUpdateArguments(name,args);
+ const {action,releaseTag,resumeId,priorRecoveryFile,preserveIdentityFile,mode,id}=parseSelectedUpdateArguments(name,args);
  if(mode==='--export-recovery'){await exportRecovery(root,name,id);return;}
  if(mode==='--receive'){
   const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});const iterator=lines[Symbol.asyncIterator]();
@@ -94,8 +96,10 @@ async function main(){
  }
  let priorRecovery;
  if(priorRecoveryFile){const stat=fs.lstatSync(priorRecoveryFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>128000)throw Error('Use a bounded regular prior recovery proof file');priorRecovery=validatePriorRecoveryProof(JSON.parse(fs.readFileSync(priorRecoveryFile,'utf8')));}
+ let preserveIdentity;
+ if(preserveIdentityFile){const stat=fs.lstatSync(preserveIdentityFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>8192)throw Error('Use the bounded historical metadata file');const historicalMetadata=JSON.parse(fs.readFileSync(preserveIdentityFile,'utf8'));preserveIdentity=validateIdentityPreservation({historicalMetadata,historicalMetadataSha256:createHash('sha256').update(JSON.stringify(historicalMetadata)).digest('hex')});}
  const selected=await latestRelease(name,{releaseTag});const tooling=name==='codeship'?selected:await latestRelease('codeship');
- const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
+ const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),...(preserveIdentity?{preserveIdentity}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
  console.log(name+': approved successful stable GitHub release '+selected.manifest.tag);
  if(mode==='--check')return;
