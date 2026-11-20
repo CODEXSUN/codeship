@@ -1,0 +1,10 @@
+**
+!.container/
+!.container/**
+!tests/
+!tests/latest-update.test.ts
+!tests/migration-operation.test.ts
+!tests/clean-updater-git.test.ts
+!tests/hostinger-target.test.mjs
+!.gitignore
+!tests/offhost-recovery.test.ts

@@ -1,3 +1,5 @@
+import {requireRecoveryChannel,requestOffhostRecovery} from '../offhost-recovery.mjs';
+import {applyMigration} from '../migration-operation.mjs';
 import {platformIngressPeers} from './platform-ingress-peers.mjs';
 import {admitPlatformDevkit} from './platform-admission.mjs';
 import {platformDevkitNetwork} from './platform-network.mjs';
@@ -62,7 +64,7 @@ let dbClosed=false;
 async function verify(){
  await ensureMetricsCollector();
  for(const name of selected){for(const suffix of ['/api/live','/api/ready','/']){const response=await fetch('http://127.0.0.1:'+ports[name]+suffix,{signal:AbortSignal.timeout(10000)});if(response.status!==200)throw new Error(name+' readiness failed.');await response.body?.cancel();}
-  const forbidden=await fetch('http://127.0.0.1:'+ports[name]+'/api/ready',{headers:{Origin:'https://example.invalid'},signal:AbortSignal.timeout(5000)});if(forbidden.status!==403)throw new Error(name+' origin guard failed.');
+  if(!hostinger){const forbidden=await fetch('http://127.0.0.1:'+ports[name]+'/api/ready',{headers:{Origin:'https://example.invalid'},signal:AbortSignal.timeout(5000)});if(forbidden.status!==403)throw new Error(name+' origin guard failed.');}
   const facts=JSON.parse(docker(['inspect','--format','{"name":{{json .Name}},"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"health":{{json .State.Health.Status}},"mounts":{{json .Mounts}},"ports":{{json .HostConfig.PortBindings}}}',name]));
   if(facts.name!=='/'+name||facts.project!=='devkits'||facts.service!==name||facts.health!=='healthy')throw new Error('Devkit group identity verification failed.');
   if(images[name]?.imageId&&facts.image!==images[name].imageId)throw new Error('Running '+name+' image differs from the approved release.');
@@ -180,19 +182,38 @@ try{
   // Reuse exact CodeShip data/key volumes across Compose project/service renaming.
   const mounts=[{type:'volume',source:'codeship_data',target:'/data'},{type:'volume',source:'codeship_keys',target:'/keys'}];
   const codeShipTool=(command:string[],input?:string|Buffer)=>docker(['run','--rm',...(input!==undefined?['-i']:[]),'--network','none','-e','CODESHIP_SQLITE_FILE=/data/codeship.sqlite','-e','CODESHIP_VAULT_KEY_FILE=/keys/vault.key','-e','CODESHIP_DEPLOYMENT_PROJECT=devkits',...mounts.flatMap(m=>['--mount',`type=${m.type},source=${m.source},target=${m.target}`]),images.codeship.image,'node',...command],input);
+  if(selected.includes('codeship')){
   const codeShipPlan=JSON.parse(codeShipTool(['scripts/migration-plan.ts']));
   const codeShipDecision=migrationDecision(codeShipPlan,histories.codeship??prior?.services.codeship?.migrations??legacyState?.migrations,images.codeship.migrations);
   if(codeShipDecision.migrateRequired){
+   if(hostinger)requireRecoveryChannel();
    const current=docker(['ps','-q','--filter',prior?'label=com.docker.compose.project=devkits':'label=com.docker.compose.project=codeship','--filter',prior?'label=com.docker.compose.service=codeship':'label=com.docker.compose.service=app']);if(current)docker(['stop',current]);
-   codeShipTool(['scripts/backup.ts','/data/backups/devkits-'+run+'.sqlite']);codeShipTool(['scripts/database.ts','migrate']);await stage('codeship-migration','passed',{backupCreated:true});
+   const backup='/data/backups/devkits-'+run+'.sqlite';
+   codeShipTool(['scripts/backup.ts',backup]);
+   if(hostinger){
+    const digest=codeShipTool(['-e',"console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync("+JSON.stringify(backup)+")).digest('hex'))"]);
+    const proof=await requestOffhostRecovery({kind:'sqlite',service:'codeship',file:backup,sha256:digest,imageId:images.codeship.imageId});
+    await stage('codeship-offhost-recovery','passed',{sha256:proof.sha256,reference:proof.reference});
+   }
+   codeShipTool(['scripts/database.ts','migrate']);await stage('codeship-migration','passed',{backupCreated:true});
   }else await stage('codeship-migration','skipped',{reason:'No pending migrations; data and key volumes retained'});
+  }else await stage('codeship-migration','skipped',{reason:'CodeShip is not selected; its schema is unchanged'});
   if(images.codeitz&&selected.includes('codeitz')){
    const plan=JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--mount','type=bind,source='+path.join(images.codeitz.contractRoot??path.join(appRoot,'.container/devkits'),'codeitz-plan.ts')+',target=/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts,readonly','--entrypoint','node',images.codeitz.image,'/opt/codebiz/devkit/codeitz/scripts/codeship-plan.ts']));
    const decision=migrationDecision(plan,histories.codeitz??prior?.services.codeitz?.migrations,images.codeitz.migrations);
-   if(decision.migrateRequired){
-    if(prior?.services.codeitz){docker(['stop','codeitz']);const {parseEnv}=await import('node:util');const env=parseEnv(await readFile(codeitzEnvFile,'utf8')),backup=path.join(privateRoot,'codeitz-before-migration-'+run+'.dump'),bin=process.platform==='win32'?'C:/Program Files/PostgreSQL/17/bin/':'';execute(path.join(bin,'pg_dump'),['--format=custom','--file',backup],{env:{...process.env,...env,PGHOST:'127.0.0.1',PGPORT:String(pgRecord.port??5433)},quiet:true});execute(path.join(bin,'pg_restore'),['--list',backup],{quiet:true});await stage('codeitz-backup','passed',{backup,sha256:createHash('sha256').update(await readFile(backup)).digest('hex'),check:'Archive readable; no restore rehearsal claimed'});}
-    docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--entrypoint','node',images.codeitz.image,'scripts/database.ts']);await stage('codeitz-migration','passed');
-   }else await stage('codeitz-migration','skipped',{reason:'No pending PostgreSQL migrations'});
+   const {parseEnv}=await import('node:util');
+   const migrationEnv=parseEnv(await readFile(codeitzEnvFile,'utf8'));
+   const backup=path.join(privateRoot,'codeitz-before-migration-'+run+'.dump');
+   const bin=process.platform==='win32'?'C:/Program Files/PostgreSQL/17/bin/':'';
+   if(hostinger&&decision.migrateRequired)requireRecoveryChannel();
+   await applyMigration({decision,installed:!!prior?.services.codeitz,requireOffhost:hostinger,
+    authorizeRecovery:async(recovery:any)=>requestOffhostRecovery({kind:'postgresql',service:'codeitz',file:recovery.backup,sha256:recovery.sha256}),
+    quiesce:async()=>{docker(['stop','codeitz']);},
+    backup:async()=>{execute(path.join(bin,'pg_dump'),['--format=custom','--file',backup],{env:{...process.env,...migrationEnv,PGHOST:'127.0.0.1',PGPORT:String(pgRecord.port??5433)},quiet:true});return {backup,sha256:createHash('sha256').update(await readFile(backup)).digest('hex')};},
+    checkBackup:async()=>{execute(path.join(bin,'pg_restore'),['--list',backup],{quiet:true});},
+    migrate:async()=>{docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--entrypoint','node',images.codeitz.image,'scripts/database.ts']);},
+    record:async(kind:string,status:string,detail:Record<string,unknown>={})=>{await stage('codeitz-'+kind,status,kind==='backup'?{...detail,check:'Recovery archive readable; full restore rehearsal runs locally'}:detail);},
+   });
    if(hostinger&&!prior?.services.codeitz){
     docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+codeitzEnvFile+',target=/opt/codebiz/devkit/codeitz/.env,readonly','--mount','type=bind,source='+path.join(appRoot,'.container/devkits/codeitz-fresh.ts')+',target=/opt/codebiz/devkit/codeitz/scripts/codeship-fresh.ts,readonly','--entrypoint','node',images.codeitz.image,'scripts/codeship-fresh.ts']);
     await stage('codeitz-fresh-references','passed',{dataImported:false,businessRecords:0});

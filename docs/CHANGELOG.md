@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.27
+Current version: 1.0.28
 
-Release tag: v-1.0.27
+Release tag: v-1.0.28
 
-Changelog label: v 1.0.27
+Changelog label: v 1.0.28
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.28
+
+### [v 1.0.28] 2026-11-20 - Use clean GitHub latest releases and checked migration recovery
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.28.
+- Add selected clean-GitHub update.sh entry with latest stable successful tagged-release discovery, immutable image checks, version/no-op/downgrade guards and exclusive locking. Keep GitHub credentials local and send only temporary approved asset links. Preserve external private state; no server builds or patches.
+- Keep image-only updates free of backup/migration work and never migrate unselected CodeShip. Existing PostgreSQL/SQLite migrations require quiescence, checked backup and off-host local-Docker restore approval before schema effects. Failures preserve recovery and block migration.
 
 ## v-1.0.27
 

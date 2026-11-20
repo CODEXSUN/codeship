@@ -148,3 +148,7 @@ vite.config.ts.timestamp-*
 *.sqlite-*
 *.dump
 *.key
+
+# Released updater links private state/dependencies outside the clean checkout.
+/.codeship
+/node_modules
