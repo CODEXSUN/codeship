@@ -6,7 +6,7 @@ import os from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {latestRelease,updateDecision} from '../latest-release.mjs';
-import {validateUpdateTicket,remoteUpdateCommand} from './update-policy.mjs';
+import {validateUpdateTicket,remoteUpdateCommand,validatePriorRecoveryProof,parseSelectedUpdateArguments} from './update-policy.mjs';
 import {assertCleanCheckout} from './clean-checkout.mjs';
 import readline from 'node:readline';
 import {runLifecycleWithRecovery,exportRecovery} from './recovery-channel.mjs';
@@ -33,7 +33,7 @@ export async function receiveUpdate(name,ticket,approve){
  if(action==='setup'&&installed)throw Error(name+' is installed; use update.sh; no reset or replacement performed');
  if(action==='update'&&!installed)throw Error(name+' is not installed; use setup.sh separately');
  const actual=installed?cp.execFileSync('docker',['inspect',name,'--format','{{.Image}}'],{encoding:'utf8'}).trim():undefined;
- const current=action==='update'&&!ticket.resumeId&&updateDecision(installed,ticket.manifest,actual)==='current';
+ const current=action==='update'&&!ticket.resumeId&&!ticket.priorRecovery&&updateDecision(installed,ticket.manifest,actual)==='current';
 
  const expected=JSON.parse(fs.readFileSync(root+'/package.json','utf8')).dependencies;
  for(const dependency of ['kysely','pg','zod','mysql2','bcryptjs']){
@@ -50,6 +50,14 @@ export async function receiveUpdate(name,ticket,approve){
  const approved=stateRoot+'/devkits/approved';fs.mkdirSync(approved,{recursive:true,mode:0o700});
  const releaseSetFile=path.join(approved,name+'-'+randomUUID()+'.json');
  fs.writeFileSync(releaseSetFile,JSON.stringify({schema:1,source:'github',approvedAt:ticket.approvedAt,services:{[name]:ticket.manifest}}),{mode:0o600,flag:'wx'});
+ if(ticket.priorRecovery){
+  const proofFile=path.join(approved,'platform-prior-proof-'+randomUUID()+'.json');
+  fs.writeFileSync(proofFile,JSON.stringify(ticket.priorRecovery),{mode:0o600,flag:'wx'});
+  const child=cp.fork('.container/apps/platform-prior-recovery-runner.ts',[releaseSetFile,proofFile],{cwd:root,env,stdio:['ignore','inherit','inherit','ipc']});
+  const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
+  if(code!==0)throw Error('Prior Platform runtime recovery stopped; fix locally');
+  console.log('platform: prior '+ticket.manifest.version+' availability restored without migration or data restore');return;
+ }
  await runLifecycleWithRecovery({name,ticket,env,root,releaseSetFile,approve});
  console.log(name+': updated to '+ticket.manifest.version+' using published tooling '+ticket.tooling.version);
 }
@@ -72,9 +80,7 @@ async function sendUpdate(name,ticket){
 }
 async function main(){
  const [name,...args]=process.argv.slice(2);product(name);
- const action=args.includes('--setup')?'setup':'update';let flags=args.filter(a=>a!=='--setup');const tagIndex=flags.indexOf('--tag'),releaseTag=tagIndex>=0?flags[tagIndex+1]:undefined;if(tagIndex>=0){if(!releaseTag)throw Error('Release tag missing');flags.splice(tagIndex,2);}const resumeIndex=flags.indexOf('--resume'),resumeId=resumeIndex>=0?flags[resumeIndex+1]:undefined;if(resumeIndex>=0){if(!resumeId)throw Error('Resume operation ID missing');flags.splice(resumeIndex,2);}const [mode,id]=flags;
- if(releaseTag&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
- if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
+ const {action,releaseTag,resumeId,priorRecoveryFile,mode,id}=parseSelectedUpdateArguments(name,args);
  if(mode==='--export-recovery'){await exportRecovery(root,name,id);return;}
  if(mode==='--receive'){
   const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});const iterator=lines[Symbol.asyncIterator]();
@@ -86,8 +92,10 @@ async function main(){
    });
   }finally{lines.close();process.stdin.pause();}return;
  }
+ let priorRecovery;
+ if(priorRecoveryFile){const stat=fs.lstatSync(priorRecoveryFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>128000)throw Error('Use a bounded regular prior recovery proof file');priorRecovery=validatePriorRecoveryProof(JSON.parse(fs.readFileSync(priorRecoveryFile,'utf8')));}
  const selected=await latestRelease(name,{releaseTag});const tooling=name==='codeship'?selected:await latestRelease('codeship');
- const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
+ const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
  console.log(name+': approved successful stable GitHub release '+selected.manifest.tag);
  if(mode==='--check')return;

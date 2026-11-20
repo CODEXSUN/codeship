@@ -2,13 +2,29 @@
 
 ## Version State
 
-Current version: 1.0.29
+Current version: 1.0.30
 
-Release tag: v-1.0.29
+Release tag: v-1.0.30
 
-Changelog label: v 1.0.29
+Changelog label: v 1.0.30
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.30
+
+### [v 1.0.30] 2026-11-20 - Recover unchanged Platform service through verified released scripts
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.30.
+- Add explicit Platform prior-service recovery through the released Hostinger update entry; require exact approved stopped image/configuration, migration history and independently checked scoped recovery fingerprints.
+- Preserve current databases and successful release pointers; refuse recovery after completed migration/replacement, unknown schema/data changes or incomplete proof.
+- Probe populated legacy retirement read-only before stopping a writer, and refuse unsupported preservation orchestration without changing schema.
+- No new deployment locks, app UI/dependency changes, automatic rollback, database import/reset or VPS source repairs.
 
 ## v-1.0.29
 

@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {assertPlatformRetirementPreflight,retirementMigration,platformRetirementProbeCode} from '../.container/apps/platform-retirement-preflight.mjs';
+const plans=[{scope:'master',pending:[retirementMigration]}];
+const empty={users:0,user_credentials:0,sessions:0,tenant_memberships:0,platform_operators:0};
+test('image-only and unrelated plans never probe legacy identities',()=>{let called=false;assertPlatformRetirementPreflight([{scope:'master',pending:[]}],()=>{called=true;});assert.equal(called,false);});
+test('populated retirement refuses before caller can quiesce',()=>{let stopped=false;assert.throws(()=>{assertPlatformRetirementPreflight(plans,()=>({present:true,counts:{...empty,users:3}}));stopped=true;},/preservation adapter/);assert.equal(stopped,false);});
+test('empty legacy schema and already absent schema are allowed',()=>{assertPlatformRetirementPreflight(plans,()=>({present:true,counts:empty}));assertPlatformRetirementPreflight(plans,()=>({present:false,counts:{}}));});
+test('missing, partial and invalid snapshot counts fail closed',()=>{for(const snapshot of [undefined,{present:true,counts:{}},{present:true,counts:{...empty,users:-1}},{present:false,counts:empty}])assert.throws(()=>assertPlatformRetirementPreflight(plans,()=>snapshot));});
+test('probe uses immutable exports in explicit read-only transaction',()=>{assert.match(platformRetirementProbeCode,/SET TRANSACTION READ ONLY/);assert.match(platformRetirementProbeCode,/legacyIdentitySnapshot/);assert.doesNotMatch(platformRetirementProbeCode,/migrateToLatest|DROP TABLE|INSERT INTO/);});

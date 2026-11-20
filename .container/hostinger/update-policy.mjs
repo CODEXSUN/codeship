@@ -1,8 +1,28 @@
 import {product} from '../product.mjs';
 import {validateManifest} from '../release-policy.mjs';
 import {validReleaseAssetUrl} from '../latest-release.mjs';
+export function validatePriorRecoveryProof(proof){
+ const sha=/^[a-f0-9]{64}$/;
+ if(!proof||proof.schema!==1||Object.keys(proof).some(key=>!['schema','failedRun','baseline'].includes(key))||!/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/.test(proof.failedRun??'')||!Array.isArray(proof.baseline)||proof.baseline.length<2||proof.baseline.length>100)throw Error('Invalid prior recovery proof');
+ if(proof.baseline.filter(row=>row.scope==='master').length!==1||new Set(proof.baseline.map(row=>row.scope)).size!==proof.baseline.length||new Set(proof.baseline.map(row=>row.database)).size!==proof.baseline.length)throw Error('Prior recovery scopes overlap');
+ for(const row of proof.baseline){
+  if(Object.keys(row).some(key=>!['scope','database','backupSha256','schemaSha256','dataSha256','legacyIdentitySha256','offHostRestoreVerified'].includes(key))||row.scope!=='master'&&!/^tenant:[a-z0-9]{8}$/.test(row.scope??'')||!/^[_a-z][_a-z0-9]{0,62}$/.test(row.database??'')||row.offHostRestoreVerified!==true||['backupSha256','schemaSha256','dataSha256','legacyIdentitySha256'].some(key=>!sha.test(row[key]??'')))throw Error('Invalid scoped prior recovery proof');
+ }
+ return proof;
+}
+export function parseSelectedUpdateArguments(name,args){
+ product(name);const flags=[...args];const take=flag=>{const index=flags.indexOf(flag);if(index<0)return undefined;const value=flags[index+1];if(!value||value.startsWith('--')||flags.indexOf(flag,index+1)>=0)throw Error('Invalid '+flag+' option');flags.splice(index,2);return value;};
+ const setup=flags.includes('--setup');if(setup){flags.splice(flags.indexOf('--setup'),1);if(flags.includes('--setup'))throw Error('Duplicate setup option');}
+ const action=setup?'setup':'update',releaseTag=take('--tag'),resumeId=take('--resume'),priorRecoveryFile=take('--recover-prior');
+ if(priorRecoveryFile&&(name!=='platform'||action!=='update'||resumeId||!releaseTag))throw Error('Prior recovery requires Platform update with its explicit prior --tag and no resume');
+ const [mode,id]=flags;
+ if(releaseTag&&['--receive','--export-recovery'].includes(mode)||priorRecoveryFile&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
+ if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
+ return {action,releaseTag,resumeId,priorRecoveryFile,mode,id};
+}
 export function validateUpdateTicket(ticket,name){
  const descriptor=product(name);
+ if(ticket.priorRecovery!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined)throw Error('Prior recovery is restricted to an explicit Platform update');validatePriorRecoveryProof(ticket.priorRecovery);}
  if(ticket.resumeId!==undefined&&((ticket.action??'update')!=='update'||name!=='platform'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(ticket.resumeId)))throw Error('Invalid recorded resume operation');
  if(!['setup','update'].includes(ticket.action??'update'))throw Error('Invalid deployment action');
  if(ticket.schema!==1||ticket.selected!==name||ticket.source!=='github'||!/^\d+\.\d+\.\d+$/.test(ticket.tooling?.version)||ticket.tooling.tag!=='v-'+ticket.tooling.version||!/^[a-f0-9]{40}$/.test(ticket.tooling.commit??''))throw Error('Invalid approved update ticket');

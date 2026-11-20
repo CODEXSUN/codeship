@@ -1,3 +1,4 @@
+import {assertPlatformRetirementPreflight,platformRetirementProbeCode} from './platform-retirement-preflight.mjs';
 import {probePlatformRuntime,platformRuntimeProbeSettings} from './platform-runtime-probe.mjs';
 import {preparePlatformReleaseAttempt,markPlatformAttemptReplaced,validatePlatformResume,validatePlatformResumeMigrations,completePlatformReleaseAttempt,type PlatformReleaseAttempt} from './platform-release-attempt.mjs';
 import {updateDecision} from '../latest-release.mjs';
@@ -176,6 +177,8 @@ try {
     const registrations=(await master.query('SELECT d.database_name,d.connection_secret_ref,t.public_id FROM public.tenant_databases d JOIN public.tenants t ON t.id=d.tenant_id WHERE d.active AND t.active')).rows;recoveryScopes=platformRecoveryScopes(plans,registrations,JSON.parse(await readFile(markerFile,'utf8')),env);
    }finally{await master.end();}
   }
+  assertPlatformRetirementPreflight(plans,()=>JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','--input-type=module','-e',platformRetirementProbeCode])));
+  await stage('identity-retirement-preflight','passed');
   await applyPlatformMigration({decision:{migrateRequired:pending.length>0,pending},installed:!!prior,requireOffhost:hostinger,requireChannel:requireRecoveryChannel,scopes:recoveryScopes,
    quiesce:async()=>{docker(['stop','platform']);},
    backup:async scope=>{const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);const file=path.join(privateRoot,scope.database+'-before-'+run+'.dump');execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',file],undefined,connectionEnv(target.href));return {file,sha256:createHash('sha256').update(await readFile(file)).digest('hex')};},
