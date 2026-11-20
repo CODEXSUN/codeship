@@ -71,7 +71,7 @@ async function verify(){
   if(name==='codeship'&&(Object.keys(facts.ports??{}).length!==1||facts.ports['4350/tcp']?.length!==1||facts.ports['4350/tcp'][0].HostIp!=='127.0.0.1'||facts.ports['4350/tcp'][0].HostPort!==String(codeshipHostPort)))throw Error('CodeShip must publish only its own loopback 14350:4350 port.');
  }
  const selectedIdentities=Object.fromEntries(selected.map(name=>[name,docker(['inspect',name,'--format','{{.Id}}'])]));
- for(let attempt=0;attempt<30;attempt++){try{const report=await jsonFile(path.join(appRoot,'.codeship/metrics/snapshot.json'));if(report.available&&Date.now()-Date.parse(report.collectedAt)<45000&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name&&selectedIdentities[name].startsWith(r.id))))return;}catch{}await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh selected devkit metrics unavailable.');
+ for(let attempt=0;attempt<300;attempt++){try{const report=await jsonFile(path.join(appRoot,'.codeship/metrics/snapshot.json'));if(report.available&&Date.now()-Date.parse(report.collectedAt)<45000&&selected.every(name=>report.containers.some((r:any)=>r.project==='devkits'&&r.service===name&&r.owner==='devkit/'+name&&selectedIdentities[name].startsWith(r.id))))return;}catch{}await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh selected devkit metrics unavailable.');
 }
 try{
  if(mode==='verify'){await verify();await stage('verification','passed');}

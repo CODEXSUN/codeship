@@ -2,7 +2,8 @@ import {startupBudget,startupHealth} from './startup-budget.mjs';
 import {dockerBrowserOrigins} from './browser-origins.mjs';
 import {prepareAbconnectDatabase,grantAbconnectRuntime} from './abconnect-database.ts';
 import {prepareCrmDatabase} from './crm-database.ts';
-import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
+import {platformTarget,platformPasswordChangeRequired} from './platform-target.mjs';
+import {hasFreshApplicationMetrics} from './business-metrics.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
 import {readFile,writeFile,mkdir,rename,copyFile} from 'node:fs/promises';
@@ -51,7 +52,7 @@ async function verify(image:string){
  const facts=JSON.parse(docker(['inspect',name,'--format','{"image":{{json .Image}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"health":{{json .State.Health.Status}},"networkMode":{{json .HostConfig.NetworkMode}},"networks":{{json .NetworkSettings.Networks}},"ports":{{json .HostConfig.PortBindings}}}']));
  verifyIndependentContainer(name,facts);
  if(facts.project!=='applications'||facts.health!=='healthy'||facts.image!==docker(['image','inspect',image,'--format','{{.Id}}']))throw Error('Application image or health identity mismatch.');
- await ensureMetricsCollector();for(let attempt=0;attempt<40;attempt++){const report=await(await fetch(installedCodeshipOrigin(appRoot)+'/api/v1/docker-metrics/apps')).json();if(!report.stale&&report.containers.some((row:any)=>row.project==='applications'&&row.service===name))return;await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
+ await ensureMetricsCollector();for(let attempt=0;attempt<300;attempt++){try{const report=JSON.parse(await readFile(path.join(appRoot,'.codeship/metrics/snapshot.json'),'utf8'));const id=docker(['inspect',name,'--format','{{.Id}}']);if(hasFreshApplicationMetrics(report,name,id,Date.now()))return;}catch{}await new Promise(resolve=>setTimeout(resolve,1000));}throw Error('Fresh application metrics unavailable.');
 }
 async function registry(env:Record<string,string>,version:string,verified=false){
  const serialized=serializeDeploymentEnvironment(env);

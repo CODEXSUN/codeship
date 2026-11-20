@@ -1,3 +1,7 @@
+# CodeShip 1.0.31 — app launcher and tab sessions
+
+Adds the authenticated Platform launcher and independent tab sessions to CodeShip. Management sign-in retains administrator routes. Selected business updates verify fresh private host metrics against the exact container; selected devkit updates allow a bounded wait for the collector. Existing v1.0.30 deployment and recovery changes are retained.
+
 # CodeShip1.0.30 — checked prior-service recovery
 
 Adds an explicit Platform recovery action through the released Hostinger updater. It may start only the exact stopped prior approved container after current and retained configuration, old migration history, scoped backup checksums, and schema/data/identity fingerprints match. It never restores a database, migrates, chooses a downgrade or changes the successful release pointer. A fresh proof recheck precedes the selected start; sibling identity and bounded readiness checks follow.

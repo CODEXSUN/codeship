@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.30
+Current version: 1.0.31
 
-Release tag: v-1.0.30
+Release tag: v-1.0.31
 
-Changelog label: v 1.0.30
+Changelog label: v 1.0.31
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.31
+
+### [v 1.0.31] 2026-11-20 - Add tab-isolated app launcher
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.31.
+- Add the authenticated app launcher and tab-isolated Platform sessions, including administrator sign-in.
+- Verify selected application metrics through the private host snapshot, with a bounded wait for the collector.
 
 ## v-1.0.30
 
