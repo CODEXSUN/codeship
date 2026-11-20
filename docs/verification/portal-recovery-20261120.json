@@ -7,5 +7,12 @@
     "Admin realm uses current URL and opens workspace",
     "SA login remains available after an authenticated workspace",
     "Selected-session logout preparation runs"
-  ]
+  ],
+  "version": "1.0.33",
+  "taggedCI": {
+    "url": "https://github.com/CODEXSUN/codeship/actions/runs/44704235761",
+    "commit": "91c342f21f43fb465fa29f3b4c20aee3686f50c8",
+    "passed": true
+  },
+  "deploymentPerformed": false
 }
