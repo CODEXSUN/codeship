@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.37
+Current version: 1.0.38
 
-Release tag: v-1.0.37
+Release tag: v-1.0.38
 
-Changelog label: v 1.0.37
+Changelog label: v 1.0.38
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.38
+
+### [v 1.0.38] 2026-11-20 - Deploy IILabs public pages independently of backend
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.38.
+- Added selected stateless IILabs public-site setup/update using its approved image and original public build.
+- Reuses shared frontend serving, blocks backend/login with503 and source paths with404, binds only127.0.0.1:14435 and preserves all other containers.
+- Local Docker/browser checks passed original Home/Services/Approach/Studio and linked assets. No tenant/database/Platform mutation.
 
 ## v-1.0.37
 

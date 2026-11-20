@@ -10,6 +10,7 @@ import {assertCleanCheckout} from './hostinger/clean-checkout.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 async function main(){
  const [action,name,...args]=process.argv.slice(2);const descriptor=product(name);
+ if(name==='iilabs')throw Error('The public-only IILabs entry is scoped to Hostinger; preserve the existing local installation.');
  const tagIndex=args.indexOf('--tag'),releaseTag=tagIndex>=0?args[tagIndex+1]:undefined;if(tagIndex>=0){if(!releaseTag)throw Error('Release tag missing');args.splice(tagIndex,2);}
  const resumeIndex=args.indexOf('--resume'),resumeId=resumeIndex>=0?args[resumeIndex+1]:undefined;if(resumeIndex>=0){if(!resumeId||name!=='platform'||action!=='update'||!/^[a-f0-9-]{36}$/.test(resumeId))throw Error('Invalid recorded resume operation');args.splice(resumeIndex,2);}
  if(!['setup','update'].includes(action)||args.some(a=>a!=='--check')||args.length>1)throw Error('Use selected setup/update --target local [--check]');
