@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.33
+Current version: 1.0.34
 
-Release tag: v-1.0.33
+Release tag: v-1.0.34
 
-Changelog label: v 1.0.33
+Changelog label: v 1.0.34
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.34
+
+### [v 1.0.34] 2026-11-20 - Add scoped IILabs public HTTPS ingress
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.34.
+- Added selected Hostinger IILabs Nginx setup/update entries with existing-account ACME, private upstream, ownership checks and configuration recovery.
+- Local Nginx 1.28.3 Docker validation passed for HTTP/TLS configuration, HTTPS absent-upstream 503 and HTTP-to-HTTPS 308. No application deployment or data changes.
 
 ## v-1.0.33
 
