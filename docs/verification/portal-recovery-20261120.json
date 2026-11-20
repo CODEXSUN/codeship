@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "scope": "Built CodeShip frontend with controlled isolated API denial fixtures; not running Docker",
+  "cases": [
+    "Workspace 403 stays on usable login with banner",
+    "Browser URL switches to administrator portal",
+    "Admin realm uses current URL and opens workspace",
+    "SA login remains available after an authenticated workspace",
+    "Selected-session logout preparation runs"
+  ]
+}

@@ -2,13 +2,27 @@
 
 ## Version State
 
-Current version: 1.0.32
+Current version: 1.0.33
 
-Release tag: v-1.0.32
+Release tag: v-1.0.33
 
-Changelog label: v 1.0.32
+Changelog label: v 1.0.33
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.33
+
+### [v 1.0.33] 2026-11-20 - Keep portal sign-in available after workspace access denial
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.33.
+- Pin UI 0.1.21 and SDK 0.1.13 to keep public login portals and aliases available after workspace denial, with a form message and selected-tab preparation.
+- Preserve the complete published 1.0.32 operator, recovery, migrations and frontend; no deployment or new migration from this patch.
 
 ## v-1.0.32
 

@@ -15,13 +15,13 @@
     {
       "path": "packages/ui",
       "repository": "CODEXSUN/ui",
-      "commit": "7beafa2c103e0f712b1c764b7cc494db784d0f44",
+      "commit": "ef7e3597f0b325f0de2d7285ac5170fff9e45f70",
       "sshSecret": "RELEASE_UI_KEY"
     },
     {
       "path": "packages/sdk",
       "repository": "CODEXSUN/sdk",
-      "commit": "ccff028cc970174ed9283beca07834e5290b2bfd",
+      "commit": "ce60867a1e8127fd570c6182d792ea5b16af649c",
       "sshSecret": "RELEASE_SDK_KEY"
     }
   ]
