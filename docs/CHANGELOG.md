@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.36
+Current version: 1.0.37
 
-Release tag: v-1.0.36
+Release tag: v-1.0.37
 
-Changelog label: v 1.0.36
+Changelog label: v 1.0.37
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.37
+
+### [v 1.0.37] 2026-11-20 - Match infrastructure cards to existing Docker services
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.37.
+- Match VPS and local Infrastructure records to their exact Compose project and service, showing each registered service once.
+- Recognize existing File Browser service aliases without cross-project guesses.
+- Preserve all records, credentials, volumes and service configuration; no schema changes.
 
 ## v-1.0.36
 

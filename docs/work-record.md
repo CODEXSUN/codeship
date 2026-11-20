@@ -666,3 +666,10 @@ Published34/db18a33c8560843a2d62dd0ee9e15957145fa48d passed CI44763824089. Its r
 Release35/ac41eca3bfe06eacfac45deb4983500389640aba passed CI44764589679. Released update obtained iilabs.in certificate expiring2027-02-18 with saved renewal hook/timer. Immediate TLS admission encountered unrecognized-name during asynchronous Nginx worker reload and restored prior absent site. Certificate retained; recovery /home/codebiz/.deployment/recovery/iilabs-ingress/20261120T153719Z-1458280. Source-only correction adds bounded curl transport retries after reload; no live host patch. Application remains absent.
 
 Local admission retry fixture started the Nginx container after a two-second delay. Curl transport retries tolerated initial connection refusal and completed with503 from the selected HTTPS route. Test container removed; certificate fixture retained outside source. No VPS test/build/patch used.
+
+
+## 2026-11-20 — Infrastructure card matching correction, 1.0.37
+
+The existing page filtered matches to local-docker and could choose a same-kind record from another project. VPS Redis/MariaDB therefore appeared as both live metric and unmatched configured cards. Match exact Compose project and service kind across registered environments; require one unambiguous record. Recognize filemanager/file-manager/filebrowser/media aliases only in the exact project. Preserve configured services without metrics and all saved records/credentials. Four focused tests cover VPS/local matches, different projects/kinds, File Browser aliases, missing records and ambiguity. Local Docker verification precedes any VPS promotion, per user instruction. No schema change, infrastructure reinstall or restart is needed.
+
+Local source checks: TypeScript passed, production frontend build passed in67.8s, all177 unit/tool tests passed with zero failures/skips. The four new tests confirm deduplication of the exact VPS examples and preserve unmatched/ambiguous registrations. Immutable release CI and selected local Docker verification remain required before cloud promotion.

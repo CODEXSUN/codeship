@@ -8,6 +8,7 @@ import {Sparkline} from '@workspace/ui/components/sparkline';
 import {Circle,ExternalLink} from 'lucide-react';
 import {browserUrl,metricAppUrl,storagePercent} from './presentation';
 import {appendMetricSamples,type MetricSamples} from './samples';
+import {infrastructureRecord} from './infrastructure-match';
 import {AsyncState} from '@workspace/ui/blocks/async-state';
 import {RecordDetailV1} from '@workspace/ui/blocks/record-detail-v1';
 import type {ManagedApplication} from '../../../../contracts/application';
@@ -33,7 +34,7 @@ export function DockerMetricsPage({category,onHeaderActionsChange,path,navigate,
  const diskUsed=diskReadings.length?Math.max(...diskReadings.map(row=>row.diskUsedBytes!)):null;
  const diskCapacity=diskReadings.length?Math.max(...diskReadings.map(row=>row.diskTotalBytes!)):null;
  function applicationRecord(row:DockerMetric){return applications?.find(record=>record.owner===row.owner&&record.project===row.project&&record.environment==='local-docker');}
- function serviceRecord(row:DockerMetric){const candidates=infrastructure?.filter(service=>service.environment==='local-docker'&&(service.kind==='file-manager'?'filemanager':service.kind)===row.service)??[];return candidates.find(service=>service.project===row.project)??(candidates.length===1?candidates[0]:undefined);}
+ function serviceRecord(row:DockerMetric){return infrastructureRecord(row,infrastructure??[]);}
  function openApp(url:string|null,name:string){return url?<a href={url} target="_blank" rel="noopener noreferrer" aria-label={'Open '+name+' in a new tab'} title={'Open '+name+' in a new tab'} className="absolute right-2 top-2 z-10 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><ExternalLink className="size-4" aria-hidden="true"/></a>:null;}
  function appUrl(row:DockerMetric){return category==='infra'?(row.service==='filemanager'?metricAppUrl(row,serviceRecord(row)):null):metricAppUrl(row,applicationRecord(row));}
  function diskGraph(row:DockerMetric){const used=row.storageBytes??null;return <figure className="min-w-0 space-y-2 text-center" title={'Writable layer: '+size(row.writableBytes??null)+' · Mounted data: '+size(row.volumeBytes??null)+'. Ring: container storage / '+size(row.diskTotalBytes??null)+' Docker disk capacity. Shared mounts may also appear on other containers. Excludes image layers and Docker logs.'}><figcaption className="text-xs text-muted-foreground">Disk</figcaption><p className="truncate text-sm font-medium tabular-nums">{size(used)}</p><div className="flex h-12 items-center justify-center"><UsageRing className="size-12" value={storagePercent(row)} label="Container storage share of Docker disk capacity"/></div></figure>;}

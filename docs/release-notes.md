@@ -1,5 +1,5 @@
-# CodeShip 1.0.33 login recovery
+# CodeShip 1.0.37
 
-Workspace access denial stays on a usable login form with a message. User, administrator and SA portal URLs and aliases still require Platform authentication and current CodeShip grants. UI0.1.21 and SDK0.1.13 prepare only the selected tab and ignore stale sign-in responses.
+Match Infrastructure records to existing Docker metric cards on VPS and local Docker. Redis and MariaDB no longer appear twice; File Browser aliases match within the registered project. Ambiguous registrations stay visible.
 
-Preserves the complete published1.0.32 operator and recovery changes. This patch changes only published authentication dependency pins, version and verification records; it introduces no database migration or deployment effect. Running14350 needs a separately authorized update.
+No schema, credential, container-topology or business-data changes. Test locally, then promote the same immutable image to cloud.
