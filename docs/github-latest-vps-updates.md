@@ -10,11 +10,11 @@ Use a clean local CodeShip tooling release checkout with the existing operator G
     sh .container/devkits/codeitz/update.sh --target hostinger
     sh .container/devkits/uiux/update.sh --target hostinger
 
-The owning app's .container/update.sh delegates to the same selected entry when the released CodeShip checkout is its workspace sibling. Run one app at a time. --check resolves the latest approved GitHub release locally; installed-version comparison happens under the deployment lock when updating.
+The owning app's .container/update.sh delegates to the same selected entry when the released CodeShip checkout is its workspace sibling. Run one app at a time. --check resolves the latest approved GitHub release locally; installed-version comparison happens when updating.
 
 The local entry resolves the highest stable published tagged release, rejects a missing/failed tagged workflow or invalid manifest, and verifies the current clean tooling tag. Private UIUX access stays on the local operator: the server receives only an approved manifest and a temporary release-assets download URL, never the GitHub token. Ticket lifetime is30minutes. Source commands are clean GitHub fetch/checkout then tracked update.sh; no merges or forced resets, server npm installs/builds or frozen-source patches.
 
-VPS source controller: /home/codebiz/devkit/codeship, checked out at the exact successful CodeShip tooling tag. Ignored .codeship/node_modules links reuse the existing registered private state and matching installed dependency runtime; no data/credential copy. Strict host identity, target mapping, dependency versions and canonical /tmp/cxapp-update.lock plus shared operation.lock remain required. Existing active legacy metrics/mount dependencies are retained, not modified or falsely claimed removed. Unsupported/missing prerequisites stop the update and return the blocker to local correction.
+VPS source controller: /home/codebiz/devkit/codeship, checked out at the exact successful CodeShip tooling tag. Ignored .codeship/node_modules links reuse the existing registered private state and matching installed dependency runtime; no data/credential copy. Strict host identity, target mapping, dependency versions remain required; the automatic deployment locks have been removed in local source. Existing active legacy metrics/mount dependencies are retained, not modified or falsely claimed removed. Unsupported/missing prerequisites stop the update and return the blocker to local correction.
 
 ## Release and migration safety
 
@@ -32,3 +32,21 @@ Only matching successful off-host proof permits migration. Missing approval, bac
 - CodeShip full suite initially105passed,1Windows fixture permission failure and1Docker-I/O timeout; corrected the Windows fixture and targeted Git/snapshot rerun passed3/3. Typecheck passed. UIUX19app+4tool and Codeitz109disposable-PostgreSQL tests passed for their prepared SA fixes.
 
 No VPS app changes were made to obtain these test results. Publication/tagged CI and selected deployments remain subsequent recorded stages.
+
+
+Deployment coordination (user, 20 November 2026): deployment locks are not the scheduling authority. Follow the user's explicit current instruction for which app, target and time; coding, testing, release publication and a previous deployment do not authorize another deployment. Before deploying, coordinate with the user and any running deployment owner. Identify shared Compose files, operator checkouts/state, networks, ports, databases/migrations and infrastructure; touch shared resources only when needed for the approved deployment and after coordination. Parallel independent work is allowed; do not claim conflicting shared deployments are safe. Preserve other operations and do not clear existing lock files or stop a running deployment. No automatic rollout. Existing installed releases retain their behavior until an explicitly authorized release/update.
+
+## Selected Platform/Devkit entry additions prepared for1.0.29
+
+From a clean published CodeShip tooling tag, select one product and target:
+
+```sh
+sh .container/apps/setup.sh platform --target hostinger --check
+sh .container/apps/update.sh platform --target hostinger --tag v-1.0.13
+sh .container/apps/update.sh platform --target local --tag v-1.0.13
+sh .container/devkits/codeitz/update.sh --target hostinger
+```
+
+These are prepared source interfaces, not claimed deployed until1.0.29 tagged CI and rollout are recorded. Omit --tag to resolve latest stable successful GitHub release; an explicit tested tag still requires successful CI/manifest and never permits downgrade. Host setup requires registered operator state/dependencies/private configuration; it does not provision a blank VPS. Setup refuses an installed service without resetting it. Same release invokes bounded readiness verification and skips replacement, backups and migrations. Per-product root setup/update entries delegate into this shared logic. Group entries now require a product name; no default all-app rollout.
+
+Platform update fails if installation ownership/settings are missing, rather than entering import/initialization. Every pending current master/tenant migration requires a scoped checked backup and, on Hostinger updates, offhost restore approval before any schema changes. All functional tests remain local. User/running-owner coordination is required before shared effects; no deployment lock files/flock introduced. Database integrity, operator lease and collector singleton protections are separate and retained.

@@ -1,5 +1,5 @@
 import {spawnSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,open,unlink,rename,readdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,readdir} from 'node:fs/promises';
 import {createHash,randomBytes} from 'node:crypto';
 import {parseEnv} from 'node:util';
 import path from 'node:path';
@@ -39,7 +39,6 @@ async function verify(){
  if(!fresh)throw new Error('Host collector did not provide fresh Docker metrics.');
 for(const route of ['/api/live','/api/ready','/registry','/registry/new','/api/v1/applications','/api/v1/targets','/api/v1/deployments','/api/v1/observations','/infrastructure','/api/v1/infrastructure']){const response=await fetch('http://127.0.0.1:4450'+route,{signal:AbortSignal.timeout(15000)});if(response.status!==200)throw new Error('Verification failed: '+route);await response.body?.cancel();}const foreign=await fetch('http://127.0.0.1:4450/api/v1/applications',{headers:{Origin:'https://example.invalid'},signal:AbortSignal.timeout(10000)});if(foreign.status!==403)throw new Error('Cross-origin protection failed.');console.log('Codeship ready: http://127.0.0.1:4450; registry, records, readiness and origin protection passed.');}
 if(mode==='verify'){await verify();process.exit(0);}if(check){console.log('Docker and reviewed deployment identity verified; no changes.');process.exit(0);}
-const lockFile=envFile+'.lock';let lock;try{lock=await open(lockFile,'wx',0o600);}catch{throw new Error('Deployment locked. Inspect the existing operation before retrying.');}
 const run=new Date().toISOString().replace(/[:.]/g,'-')+'-'+randomBytes(3).toString('hex'),logDir=path.join(path.dirname(envFile),'runs',run);await mkdir(logDir,{recursive:true,mode:0o700});
 const logFile=path.join(logDir,'stages.jsonl'),markdown=path.join(logDir,'stages.md');
 async function stage(name,status,detail={}){const row={at:new Date().toISOString(),stage:name,status,...detail};await writeFile(logFile,JSON.stringify(row)+'\n',{flag:'a',mode:0o600});await writeFile(markdown,`- ${row.at} **${name}** ${status} ${JSON.stringify(detail)}\n`,{flag:'a',mode:0o600});console.log(name+': '+status);}
@@ -83,4 +82,3 @@ try{
  await writeFile(envFile+'.next',serialize(runtime),{mode:0o600});await rename(envFile+'.next',envFile);
  await stage('release','succeeded',{version,image});
 }catch(error){await stage('release','failed',{message:error.message,backupCreated:backedUp,migrationCompleted:migrated});console.error('Retain data/key volumes, previous image and stage logs. No automatic rollback or retry.');throw error;}
-finally{await lock.close();await unlink(lockFile);}

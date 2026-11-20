@@ -1,22 +1,24 @@
+import {product} from './product.mjs';
 import {githubApi,githubToken} from './github.mjs';
 import {validateManifest} from './release-policy.mjs';
 export function compareVersions(a,b){
  const parse=v=>{if(!/^\d+\.\d+\.\d+$/.test(v))throw Error('Use stable semantic versions');return v.split('.').map(Number);};
  const x=parse(a),y=parse(b);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i]?1:-1;return 0;
 }
-export async function latestRelease(name,{api=githubApi,download=fetch,token=githubToken}={}){
- if(!['codeship','codeitz','uiux'].includes(name))throw Error('Select one supported devkit');
+export async function latestRelease(name,{api=githubApi,download=fetch,token=githubToken,releaseTag}={}){
+ const descriptor=product(name);
  const repo='CODEXSUN/'+name;
  const releases=await api('/repos/'+repo+'/releases?per_page=100');
  const stable=releases.filter(r=>!r.draft&&!r.prerelease&&/^v-\d+\.\d+\.\d+$/.test(r.tag_name)).sort((a,b)=>compareVersions(b.tag_name.slice(2),a.tag_name.slice(2)));
  if(!stable.length)throw Error('No stable tagged release for '+name);
- const release=stable[0],tag=release.tag_name;
+ if(releaseTag!==undefined&&!/^v-\d+\.\d+\.\d+$/.test(releaseTag))throw Error('Use an explicit stable release tag');
+ const release=releaseTag?stable.find(r=>r.tag_name===releaseTag):stable[0];if(!release)throw Error('Requested stable published release missing');const tag=release.tag_name;
  const commit=await api('/repos/'+repo+'/commits/'+tag);
  const runs=await api('/repos/'+repo+'/actions/runs?head_sha='+commit.sha+'&per_page=100');
  if(!runs.workflow_runs.some(r=>r.path==='.github/workflows/release.yml'&&r.head_branch===tag&&['push','workflow_dispatch'].includes(r.event)&&r.status==='completed'&&r.conclusion==='success'))throw Error(name+' latest release has no successful tagged workflow');
  const manifestAsset=release.assets.find(a=>a.name==='release-manifest.json');
  if(!manifestAsset)throw Error(name+' release manifest missing');
- const manifest=validateManifest(JSON.parse((await api('/repos/'+repo+'/releases/assets/'+manifestAsset.id,{raw:true})).toString()),{owner:'devkit/'+name,repository:repo,tag,commit:commit.sha});
+ const manifest=validateManifest(JSON.parse((await api('/repos/'+repo+'/releases/assets/'+manifestAsset.id,{raw:true})).toString()),{owner:descriptor.owner,repository:repo,tag,commit:commit.sha});
  if(!/^sha256:[a-f0-9]{64}$/.test(manifest.imageId??'')||manifest.archive?.name!=='image.tar.gz'||!/^[a-f0-9]{64}$/.test(manifest.archive?.sha256??''))throw Error('Approved image archive identity missing');
  const imageAsset=release.assets.find(a=>a.name===manifest.archive.name);if(!imageAsset)throw Error('Release image asset missing');
  const response=await download('https://api.github.com/repos/'+repo+'/releases/assets/'+imageAsset.id,{headers:{Authorization:'Bearer '+token(),Accept:'application/octet-stream','User-Agent':'CodeShip-update'},redirect:'manual',signal:AbortSignal.timeout(30000)});

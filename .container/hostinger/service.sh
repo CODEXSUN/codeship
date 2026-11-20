@@ -12,10 +12,6 @@ root=/home/codebiz/.deployment
 operator="$root/operators/v-1.0.21/devkit/codeship"
 export PATH="$root/bin:$PATH"
 export CODESHIP_METRICS_READER_UID=1000
-if [ "${CODESHIP_HOSTINGER_FLOCK:-}" != 1 ]; then
-  [ ! -L /tmp/cxapp-update.lock ]
-  exec flock -n /tmp/cxapp-update.lock env CODESHIP_HOSTINGER_FLOCK=1 sh "$0" "$mode" "$service" "$@"
-fi
 cd "$operator"
 if [ "$service" = platform ]; then
   exec sh "$root/operators/v-1.0.21/apps/platform/.container/$mode.sh" "$@"

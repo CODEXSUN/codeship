@@ -1,6 +1,6 @@
 # Devkit-owned deployment with shared CodeShip tools
 
-Each Devkit-owning chat deploys and verifies its own authorized selected release. CodeShip chat handles CodeShip itself; do not hand another Devkit's deployment to it. Retain the shared operation lock and release/migration checks.
+Each Devkit-owning chat deploys and verifies its own authorized selected release. CodeShip chat handles CodeShip itself; do not hand another Devkit's deployment to it. Retain release/migration checks; coordinate deployment timing/target with the user and running owners.
 
 Installation and updates now require successful tagged GitHub releases. See [the release standard](../../../../mcp-governance/docs/tagged-releases.md). Local frozen builds below are historical installation records; they cannot be resumed as a new release.
 
@@ -49,3 +49,6 @@ The host metrics collector starts from CodeShip's native API and these deploymen
 CodeShip publishes on http://127.0.0.1:14350 with the mapping 127.0.0.1:14350:4350 (prefix 1 to internal port 4350). The older table above is historical. This update changes CodeShip only: other owners' images, ports, commands, runtime settings and physical volumes are retained exactly. Each app chat owns its own next deployment. Use the per-service codeship/update.sh and codeship/verify.sh entries with an explicit approved release set; do not invoke the all-services update for this task.
 
 The verified CodeShip release is v-1.0.14. When the primary checkout contains other chats' unfinished changes, use its retained release-matched host operator under .codeship/operators/v-1.0.14 for CodeShip-only maintenance. Do not run an older working-folder group updater against newer per-service settings. Unselected registry rows, runtime environments and Compose service definitions are now guarded against modification. See docs/work-record.md for the corrected v1.0.13 finding and final preservation evidence.
+
+
+Deployment coordination (user, 20 November 2026): deployment locks are not the scheduling authority. Follow the user's explicit current instruction for which app, target and time; coding, testing, release publication and a previous deployment do not authorize another deployment. Before deploying, coordinate with the user and any running deployment owner. Identify shared Compose files, operator checkouts/state, networks, ports, databases/migrations and infrastructure; touch shared resources only when needed for the approved deployment and after coordination. Parallel independent work is allowed; do not claim conflicting shared deployments are safe. Preserve other operations and do not clear existing lock files or stop a running deployment. No automatic rollout. Existing installed releases retain their behavior until an explicitly authorized release/update.

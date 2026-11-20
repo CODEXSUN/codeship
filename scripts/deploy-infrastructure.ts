@@ -1,5 +1,5 @@
 import {writeFileSync} from 'node:fs';
-import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {createServer,createConnection} from 'node:net';
 import path from 'node:path';
@@ -13,7 +13,7 @@ const generatedRoot=path.join(appRoot,'.codeship/infrastructure-generated')+path
 if(process.argv.length!==3||!manifestPath.startsWith(generatedRoot)||path.basename(manifestPath)!=='manifest.json')throw new Error('Provide a generated CodeShip manifest.json path.');
 const docker=(args:string[])=>{const result=spawnSync('docker',args,{encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});if(result.status!==0){writeFileSync(path.join(appRoot,'.codeship/infrastructure-docker-error.log'),result.stderr,{mode:0o600});throw new Error('Docker operation failed: '+args.slice(0,1).join(' ')+'. Inspect private operation output.');}return result.stdout.trim();};
 const stateRoot=path.join(appRoot,'.codeship/infrastructure-runtime');await mkdir(stateRoot,{recursive:true,mode:0o700});
-const lockFile=path.join(stateRoot,'deploy.lock'),lock=await open(lockFile,'wx',0o600),{db}=openDatabase();
+const {db}=openDatabase();
 const stage=async(id:string,name:string,status:string)=>{await writeFile(path.join(stateRoot,'stages.jsonl'),JSON.stringify({at:new Date().toISOString(),id,stage:name,status})+'\n',{flag:'a',mode:0o600});console.log(id+' '+name+' '+status);};
 async function redisCheck(port:number,username:string,password:string){
  await new Promise<void>((resolve,reject)=>{const socket=createConnection({host:'127.0.0.1',port});let data='';socket.setTimeout(5000);const fail=()=>{socket.destroy();reject(new Error('Redis authentication verification failed.'));};socket.on('error',fail).on('timeout',fail);socket.on('connect',()=>{const resp=(values:string[])=>'*'+values.length+'\r\n'+values.map(v=>'$'+Buffer.byteLength(v)+'\r\n'+v+'\r\n').join('');socket.write(resp(['AUTH',username||'default',password])+resp(['PING']));});socket.on('data',chunk=>{data+=chunk.toString();if(data.includes('-'))fail();else if(data.includes('+OK\r\n')&&data.includes('+PONG\r\n')){socket.end();resolve();}});});
@@ -70,4 +70,4 @@ try{
  await writeFile(path.join(stateRoot,'release.json'),JSON.stringify({manifest:manifestPath,verifiedAt:new Date().toISOString(),services:manifest.services.map((entry:any)=>({id:entry.id,project:entry.project,revision:entry.revision}))},null,2),{mode:0o600});
  console.log('All infrastructure services deployed and verified.');
 }catch{await stage('infrastructure','operation','failed');console.error('Infrastructure operation stopped. Existing data retained; review stage records and container health. No credentials printed.');process.exitCode=1;}
-finally{await db.destroy();await lock.close();await unlink(lockFile);}
+finally{await db.destroy();}

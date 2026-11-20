@@ -7,7 +7,11 @@ import {validReleaseAssetUrl} from './latest-release.mjs';
 import {mkdir,writeFile,rename,unlink} from 'node:fs/promises';
 import path from 'node:path';
 import {githubApi} from './github.mjs';
+export function requireReleaseImageStore(manifest,driverStatus){
+ if(manifest.imageId&&manifest.image?.endsWith('@'+manifest.imageId)&&!driverStatus.some(row=>row[0]==='driver-type'&&row[1]==='io.containerd.snapshotter.v1'))throw Error('Approved release requires the containerd image store; target differs. Correct the target configuration through its reviewed setup, not image aliases.');
+}
 export async function resolveReleaseImage(manifest,docker,cache) {
+ requireReleaseImageStore(manifest,JSON.parse(docker(['info','--format','{{json .DriverStatus}}'])));
  // An approved content-addressed image already loaded from a checked release
  // does not need another registry transfer. Callers still check release labels.
  if(/^sha256:[a-f0-9]{64}$/.test(manifest.imageId??''))try{

@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..'),[mode,id]=process.argv.slice(2);
 if(!['setup','verify'].includes(mode)||!/^[a-z0-9]{8}$/.test(id??''))throw new Error('Use setup|verify <infrastructure-public-id>. Prepare install in Infrastructure first.');
@@ -19,11 +19,9 @@ const stage=async(name,status)=>writeFile(path.join(directory,'stages.jsonl'),JS
 const args=['compose','--project-name',definition.name,'-f',composeFile];
 const verify=async()=>{const response=await fetch('http://127.0.0.1:'+port,{signal:AbortSignal.timeout(15000)});if(response.status!==200)throw new Error('File Manager HTTP verification failed.');await response.body?.cancel();await stage('verify','passed');console.log('File Manager verified on loopback port '+port);};
 if(mode==='verify'){await verify();process.exit(0);}
-const lockFile=path.join(directory,'setup.lock'),lock=await open(lockFile,'wx',0o600);
 try{
  await stage('preflight','started');for(const volume of Object.values(definition.volumes))if(volume.external)docker(['volume','inspect',volume.name],true);
  if(docker(['volume','ls','-q','--filter','label=com.docker.compose.project='+definition.name],true)||docker([...args,'ps','-aq'],true))throw new Error('Retained service data exists.');
  docker([...args,'config','--quiet'],true);await stage('preflight','passed');await stage('install','started');docker([...args,'up','-d','--wait','--wait-timeout','180']);await stage('install','passed');await verify();
  await writeFile(path.join(directory,'release.json'),JSON.stringify({project:definition.name,image:service.image,installedAt:new Date().toISOString(),volumes:service.volumes.map(v=>v.source)},null,2)+'\n',{mode:0o600});
 }catch{await stage('install','failed');throw new Error('File Manager setup failed. Retain storage and inspect stage records; no automatic retry or reset.');}
-finally{await lock.close();await unlink(lockFile);}

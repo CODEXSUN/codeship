@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
-cd "$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-export CODESHIP_DEVKIT_SCRIPT_ENTRY=1
-exec node .container/devkits/lifecycle.ts update all "$@"
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+name=${1:?Select codeship, codeitz or uiux; deployments run one product at a time}
+shift
+case "$name" in codeship|codeitz|uiux) ;; *) exit 2;; esac
+exec sh "$DIR/$name/update.sh" "$@"

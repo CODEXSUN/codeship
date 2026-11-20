@@ -27,15 +27,15 @@ after(async()=>{await db.destroy();rmSync(temporary,{recursive:true,force:true})
 test('migrations and registration are repeatable without changing public IDs',async()=>{const {profile}=await resolveProfile('codeitz-local');assert.equal((await targetRepository(db).register(profile)).public_id,target.public_id);assert.match(target.public_id,/^[a-z0-9]{8}$/);assert.equal((await migrator(db,schema).migrateToLatest()).error,undefined);});
 test('profiles reject traversal, arbitrary URLs and unapproved files',async()=>{assert.equal(profileSchema.safeParse({key:'unsafe',name:'Unsafe',owner:'../../outside',envFile:'.env',project:'test-project',port:4410}).success,false);await assert.rejects(()=>resolveProfile('not-registered'));});
 test('output redaction and Docker memory units',()=>{const clean=redact('PASSWORD=unsafe token=abc postgres://user:secret@localhost/db private-value',['private-value']);assert.ok(!clean.includes('unsafe'));assert.ok(!clean.includes(':secret@'));assert.ok(!clean.includes('private-value'));assert.equal(bytes('1.5GiB'),1610612736);assert.equal(bytes('10MB'),10000000);assert.equal(bytes('invalid'),null);});
-test('approval, target lock, retry deduplication and persisted results',async()=>{
+test('approval, parallel operations, retry deduplication and persisted results',async()=>{
  let release!:()=>void;const wait=new Promise<void>(resolve=>{release=resolve;});let calls=0;
  const service=deploymentService(db,async(_key,_action,line)=>{calls++;line('Saved bounded output\n');await wait;return 0;});
  await assert.rejects(()=>service.start(target.public_id,'update',randomUUID(),false));
  const key=randomUUID(),run=await service.start(target.public_id,'update',key,true);assert.ok(run);
  assert.equal((await service.start(target.public_id,'update',key,true))!.public_id,run.public_id);
- await assert.rejects(()=>service.start(target.public_id,'verify',randomUUID(),true));
+ const parallel=await service.start(target.public_id,'verify',randomUUID(),true);assert.notEqual(parallel!.public_id,run.public_id);
  await assert.rejects(()=>service.start(target.public_id,'verify',key,true));
- release();await service.close();assert.equal(calls,1);const saved=await service.repo.find(run.public_id);assert.equal(saved!.state,'succeeded');assert.equal(saved!.exit_code,0);assert.match(saved!.output,/Saved bounded output/);
+ release();await service.close();assert.equal(calls,2);const saved=await service.repo.find(run.public_id);assert.equal(saved!.state,'succeeded');assert.equal(saved!.exit_code,0);assert.match(saved!.output,/Saved bounded output/);
 });
 test('nonzero command exit records a failure',async()=>{const service=deploymentService(db,async()=>7);const run=await service.start(target.public_id,'check',randomUUID(),true);await service.close();assert.equal((await service.repo.find(run!.public_id))!.state,'failed');assert.equal((await service.repo.find(run!.public_id))!.exit_code,7);});
 test('restart recovery preserves interrupted run and its output',async()=>{const service=deploymentService(db);const owner=await targetRepository(db).find(target.public_id);const row=await service.repo.create(owner!.id,'update',randomUUID());await service.repo.append(row.public_id,'Before restart\n');await service.repo.recover();const saved=await service.repo.find(row.public_id);assert.equal(saved!.state,'interrupted');assert.match(saved!.output,/Before restart/);assert.match(saved!.output,/Inspect the deployment/);});

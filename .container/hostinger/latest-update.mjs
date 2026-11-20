@@ -1,3 +1,4 @@
+import {product,installedProduct} from '../product.mjs';
 import fs from 'node:fs';
 import cp from 'node:child_process';
 import path from 'node:path';
@@ -20,14 +21,20 @@ function linkExisting(destination,source){
 }
 export async function receiveUpdate(name,ticket,approve){
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
- if(process.platform!=='linux'||os.hostname()!=='srv914719'||process.getuid()!==0||root!=='/home/codebiz/devkit/codeship'||process.env.CODESHIP_HOSTINGER_FLOCK!=='1')throw Error('Use the approved selected VPS update entry and exclusive lock');
+ if(process.platform!=='linux'||os.hostname()!=='srv914719'||process.getuid()!==0||root!=='/home/codebiz/devkit/codeship')throw Error('Use the approved selected VPS update entry');
  const stateRoot='/home/codebiz/.deployment/state';
  const target=JSON.parse(fs.readFileSync(stateRoot+'/target.json','utf8'));
  if(target.id!=='hostinger-914719'||target.host!=='69.62.81.166'||target.operator!=='/home/codebiz/.deployment/operators/v-1.0.21/devkit/codeship'||target.publicExposure!==false||target.binding!=='127.0.0.1'||target.dataPolicy!=='fresh'||target.infraNetwork!=='cxapp-network')throw Error('Registered private deployment target differs');
  for(const file of ['data/codeship.sqlite','keys/vault.key'])if(!fs.existsSync(stateRoot+'/'+file))throw Error('Existing private operator state missing; update cannot initialize it');
- const state=JSON.parse(fs.readFileSync(stateRoot+'/devkits/state.json','utf8'));
- const actual=cp.execFileSync('docker',['inspect',name,'--format','{{.Image}}'],{encoding:'utf8'}).trim();
- if(updateDecision(state.services?.[name],ticket.manifest,actual)==='current'){console.log(name+': already on latest approved '+ticket.manifest.version+'; no replacement or migration');return;}
+ const descriptor=product(name),action=ticket.action??'update';
+ const stateFile=stateRoot+'/'+descriptor.state;
+ const state=fs.existsSync(stateFile)?JSON.parse(fs.readFileSync(stateFile,'utf8')):undefined;
+ const installed=installedProduct(name,state);
+ if(action==='setup'&&installed)throw Error(name+' is installed; use update.sh; no reset or replacement performed');
+ if(action==='update'&&!installed)throw Error(name+' is not installed; use setup.sh separately');
+ const actual=installed?cp.execFileSync('docker',['inspect',name,'--format','{{.Image}}'],{encoding:'utf8'}).trim():undefined;
+ const current=action==='update'&&!ticket.resumeId&&updateDecision(installed,ticket.manifest,actual)==='current';
+
  const expected=JSON.parse(fs.readFileSync(root+'/package.json','utf8')).dependencies;
  for(const dependency of ['kysely','pg','zod','mysql2','bcryptjs']){
   const actualPackage=JSON.parse(fs.readFileSync(target.operator+'/node_modules/'+dependency+'/package.json','utf8'));
@@ -36,15 +43,18 @@ export async function receiveUpdate(name,ticket,approve){
  linkExisting(root+'/.codeship',stateRoot);
  linkExisting(root+'/node_modules',target.operator+'/node_modules');
  cleanSource(ticket.tooling);
+ const env={...process.env,CODESHIP_SQLITE_FILE:stateRoot+'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:stateRoot+'/keys/vault.key',CODESHIP_DEVKIT_SCRIPT_ENTRY:'1',CODESHIP_APP_SCRIPT_ENTRY:'1',CODESHIP_RELEASED_UPDATE_ENTRY:'1',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_RELEASE_ASSETS_JSON:JSON.stringify({[ticket.manifest.repository+'@'+ticket.manifest.tag]:ticket.archiveUrl}),CODESHIP_KEEP_RELEASE_ARCHIVES:'0'};
+ if(current){
+  const child=cp.fork(descriptor.lifecycle,['verify',name],{cwd:root,env,stdio:['ignore','inherit','inherit','ipc']});const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});if(code!==0)throw Error('Current release readiness failed');console.log(name+': already latest; readiness verified; no replacement/migration');return;
+ }
  const approved=stateRoot+'/devkits/approved';fs.mkdirSync(approved,{recursive:true,mode:0o700});
  const releaseSetFile=path.join(approved,name+'-'+randomUUID()+'.json');
  fs.writeFileSync(releaseSetFile,JSON.stringify({schema:1,source:'github',approvedAt:ticket.approvedAt,services:{[name]:ticket.manifest}}),{mode:0o600,flag:'wx'});
- const env={...process.env,CODESHIP_DEVKIT_SCRIPT_ENTRY:'1',CODESHIP_RELEASED_UPDATE_ENTRY:'1',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_RELEASE_ASSETS_JSON:JSON.stringify({[ticket.manifest.repository+'@'+ticket.manifest.tag]:ticket.archiveUrl}),CODESHIP_KEEP_RELEASE_ARCHIVES:'0'};
  await runLifecycleWithRecovery({name,ticket,env,root,releaseSetFile,approve});
  console.log(name+': updated to '+ticket.manifest.version+' using published tooling '+ticket.tooling.version);
 }
 async function sendUpdate(name,ticket){
- const child=cp.spawn('ssh',['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','codexsun-hostinger',remoteUpdateCommand(ticket.tooling,name)],{stdio:['pipe','pipe','ignore'],windowsHide:true});
+ const child=cp.spawn('ssh',['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','codexsun-hostinger',remoteUpdateCommand(ticket.tooling,name,ticket.action??'update')],{stdio:['pipe','pipe','ignore'],windowsHide:true});
  child.stdin.on('error',()=>{});
  child.stdin.write(JSON.stringify(ticket)+'\n');
  const lines=readline.createInterface({input:child.stdout,crlfDelay:Infinity});
@@ -61,21 +71,25 @@ async function sendUpdate(name,ticket){
  await handling;lines.close();if(!child.stdin.destroyed)child.stdin.end();if(code!==0)throw Error('VPS update stopped; live data/recovery retained. Correct the blocker locally.');
 }
 async function main(){
- const [name,mode,id]=process.argv.slice(2);if(!['codeship','codeitz','uiux'].includes(name)||mode&&!['--receive','--check','--export-recovery'].includes(mode))throw Error('Use update.sh codeship|codeitz|uiux [--check]');
+ const [name,...args]=process.argv.slice(2);product(name);
+ const action=args.includes('--setup')?'setup':'update';let flags=args.filter(a=>a!=='--setup');const tagIndex=flags.indexOf('--tag'),releaseTag=tagIndex>=0?flags[tagIndex+1]:undefined;if(tagIndex>=0){if(!releaseTag)throw Error('Release tag missing');flags.splice(tagIndex,2);}const resumeIndex=flags.indexOf('--resume'),resumeId=resumeIndex>=0?flags[resumeIndex+1]:undefined;if(resumeIndex>=0){if(!resumeId)throw Error('Resume operation ID missing');flags.splice(resumeIndex,2);}const [mode,id]=flags;
+ if(releaseTag&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
+ if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
  if(mode==='--export-recovery'){await exportRecovery(root,name,id);return;}
  if(mode==='--receive'){
   const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});const iterator=lines[Symbol.asyncIterator]();
   try{const first=await iterator.next();if(first.done||first.value.length>256000)throw Error('Approved update ticket missing');
-   await receiveUpdate(name,JSON.parse(first.value),async request=>{
+   const ticket=JSON.parse(first.value);if((ticket.action??'update')!==action)throw Error('Approved deployment action differs');
+   await receiveUpdate(name,ticket,async request=>{
     console.log('CODESHIP_RECOVERY:'+JSON.stringify(request));
     let timer;try{const next=await Promise.race([iterator.next(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Local restore approval timed out')),30*60*1000);})]);if(next.done||next.value.length>8192)throw Error('Local restore approval missing');const proof=JSON.parse(next.value);if(proof.id!==request.id)throw Error('Recovery approval scope differs');return proof;}finally{clearTimeout(timer);}
    });
   }finally{lines.close();process.stdin.pause();}return;
  }
- const selected=await latestRelease(name);const tooling=name==='codeship'?selected:await latestRelease('codeship');
- const ticket={schema:1,source:'github',selected:name,approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
+ const selected=await latestRelease(name,{releaseTag});const tooling=name==='codeship'?selected:await latestRelease('codeship');
+ const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
- console.log(name+': latest successful stable GitHub release '+selected.manifest.tag);
+ console.log(name+': approved successful stable GitHub release '+selected.manifest.tag);
  if(mode==='--check')return;
  await sendUpdate(name,ticket);
 }

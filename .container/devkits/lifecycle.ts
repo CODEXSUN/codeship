@@ -9,7 +9,7 @@ import {freshUbuntuSetup} from '../ubuntu/target-policy.mjs';
 import {hostingerTargetPolicy} from '../hostinger/target-policy.mjs';
 import {spawnSync} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
-import {mkdir,readFile,writeFile,open,unlink,rename,chmod} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,rename,chmod} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -35,7 +35,6 @@ const names=['codeship','codeitz','uiux'] as const,typeNames=names as readonly s
 const selected=target==='all'?[...names]:[target as typeof names[number]];
 const runtime=path.join(appRoot,'.codeship/devkits'),privateRoot=path.join(runtime,'private'),stateFile=path.join(runtime,'state.json'),composeFile=path.join(runtime,'compose.json');
 await mkdir(privateRoot,{recursive:true,mode:0o700});
-const lockFile=path.join(runtime,'operation.lock'),lock=await open(lockFile,'wx',0o600);
 const run=new Date().toISOString().replace(/[:.]/g,'-'),log=path.join(runtime,'stages.jsonl');
 async function stage(name:string,status:string,detail:Record<string,unknown>={}){await writeFile(log,JSON.stringify({at:new Date().toISOString(),run,mode,target,stage:name,status,...detail})+'\n',{flag:'a',mode:0o600});console.log(name+': '+status);}
 function execute(command:string,args:string[],options:{input?:string|Buffer;env?:NodeJS.ProcessEnv;quiet?:boolean}={}){
@@ -263,4 +262,4 @@ try{
   await stage('release','succeeded',{services:selected,ports:selected.map(name=>ports[name])});
  }
 }catch(error){await stage('release','failed',{message:(error as Error).message});console.error('Devkit operation failed. Existing volumes, data and migration snapshots are retained.');process.exitCode=1;}
-finally{if(!dbClosed){await db.destroy();dbClosed=true;}await lock.close();await unlink(lockFile);}
+finally{if(!dbClosed){await db.destroy();dbClosed=true;}}

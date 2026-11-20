@@ -25,7 +25,7 @@ export async function verifyLocalRecovery(file,kind){
  }finally{if(created){const c=JSON.parse(text(['inspect',name]))[0];if(c.Config.Labels['codeship.recovery']!==name)throw Error('Recovery container ownership changed');docker(['rm','-fv',name]);}}
 }
 export async function saveAndVerifyRecovery(request){
- if(!['codeitz','codeship'].includes(request.service)||!['postgresql','sqlite'].includes(request.kind)||!/^[a-f0-9-]{36}$/.test(request.exportId)||!/^[a-f0-9]{64}$/.test(request.sha256))throw Error('Invalid recovery request');
+ if(!['codeitz','codeship','platform'].includes(request.service)||!['postgresql','sqlite'].includes(request.kind)||!/^[a-f0-9-]{36}$/.test(request.exportId)||!/^[a-f0-9]{64}$/.test(request.sha256))throw Error('Invalid recovery request');
  const directory=path.join(os.homedir(),'.codeship','recovery',request.exportId);fs.mkdirSync(directory,{recursive:true,mode:0o700});
  if(process.platform==='win32'){const user=(process.env.USERDOMAIN?process.env.USERDOMAIN+String.fromCharCode(92):'')+process.env.USERNAME;cp.execFileSync('icacls',[directory,'/inheritance:r','/grant:r',user+':(OI)(CI)F'],{stdio:'ignore',windowsHide:true});}
  const file=path.join(directory,request.service+(request.kind==='sqlite'?'.sqlite':'.dump'));

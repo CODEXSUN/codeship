@@ -1,0 +1,4 @@
+export interface PlatformRecoveryScope {scope:string;database:string;key:string;}
+export function assertPlatformPostgresClients(serverVersion:string|number,dumpVersion:string,restoreVersion:string):void;
+export function platformRecoveryScopes(plans:any[],registrations:any[],marker:any,environment:Record<string,string>):PlatformRecoveryScope[];
+export function applyPlatformMigration(options:{decision:{migrateRequired:boolean;pending:string[]};installed:boolean;requireOffhost:boolean;requireChannel:()=>void;scopes:PlatformRecoveryScope[];quiesce:()=>Promise<void>;backup:(scope:PlatformRecoveryScope)=>Promise<{file:string;sha256:string}>;checkBackup:(snapshot:any)=>Promise<void>;authorizeRecovery:(snapshot:any)=>Promise<any>;migrate:()=>Promise<void>;record?:(kind:string,status:string,detail?:any)=>Promise<void>}):Promise<{migrated:boolean;backup:boolean}>;

@@ -5,7 +5,7 @@ import {prepareCrmDatabase} from './crm-database.ts';
 import {platformTarget,installedCodeshipOrigin,platformPasswordChangeRequired} from './platform-target.mjs';
 import {prepareAutomationRedis} from './automation-runtime.ts';
 import {spawnSync} from 'node:child_process';
-import {readFile,writeFile,mkdir,open,unlink,rename,copyFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,copyFile} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {randomBytes,createHash} from 'node:crypto';
 import {parseEnv} from 'node:util';
@@ -31,7 +31,6 @@ const resumeSetup=mode==='setup'&&name==='abconnect'&&args.length===3&&args[2]==
 if(mode!=='verify'&&((args.length!==2&&!resumeSetup)||args[0]!=='--release-set'))throw Error('Supply an explicit approved release set.');
 const root=path.join(appRoot,'.codeship/apps',name),privateRoot=path.join(root,'private');
 await mkdir(privateRoot,{recursive:true,mode:0o700});
-const lockFile=path.join(appRoot,'.codeship/devkits/operation.lock'),lock=await open(lockFile,'wx',0o600);
 const run=new Date().toISOString().replace(/[:.]/g,'-'),stateFile=path.join(root,'state.json'),envFile=path.join(privateRoot,'runtime.env');
 const composeFile=path.join(appRoot,'.codeship/apps/platform/compose.json');
 const prior=existsSync(stateFile)?JSON.parse(await readFile(stateFile,'utf8')):undefined;
@@ -184,4 +183,3 @@ try{
   await save(stateFile,{...manifest,releaseImage,migrations:current,previousImage:prior?.image,updatedAt:new Date().toISOString(),compose:composeFile,network:{name:topology.name,address:topology.addresses[name],subnet:topology.subnet}});await stage('release','succeeded');
  }
 }catch(error){await stage('release','failed',{message:(error as Error).message});console.error('Application operation failed; prior images, independent data and recovery files are retained.');process.exitCode=1;}
-finally{await lock.close();await unlink(lockFile);}

@@ -1,11 +1,11 @@
-import {readFile,writeFile,mkdir,open,unlink} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import path from 'node:path';
 import {appRoot,openDatabase} from '../src/api/database.ts';
 import {groupCompose} from '../src/api/modules/master/infrastructure-service/group-compose.ts';
 const apply=process.argv.includes('--apply');if(process.argv.slice(2).some(arg=>arg!=='--apply'))throw new Error('Use infra:group, optionally --apply.');
 const root=path.join(appRoot,'.codeship/infrastructure-runtime'),output=path.join(root,'codebiz-infra');await mkdir(output,{recursive:true,mode:0o700});
-const lockFile=path.join(root,'deploy.lock'),lock=await open(lockFile,'wx',0o600),{db}=openDatabase();
+const {db}=openDatabase();
 const docker=(args:string[])=>{const r=spawnSync('docker',args,{encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});if(r.status!==0)throw new Error('Docker grouping operation failed. Data volumes retained.');return r.stdout.trim();};
 try{
  if(docker(['ps','-aq','--filter','label=com.docker.compose.project=codebiz-infra']))throw new Error('Codebiz infrastructure group already exists. Use its recorded Compose file.');
@@ -42,4 +42,4 @@ try{
   await writeFile(path.join(root,'group.json'),JSON.stringify({project:'codebiz-infra',compose,services:originals.map(({container,...r})=>r),verifiedAt:new Date().toISOString()},null,2),{mode:0o600});
   await stage('regroup','passed');console.log('All infrastructure containers now share the codebiz-infra Compose project; images and volume mounts preserved.');
  }
-}finally{await db.destroy();await lock.close();await unlink(lockFile);}
+}finally{await db.destroy();}

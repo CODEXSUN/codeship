@@ -6,8 +6,7 @@ and `verify.sh` delegate here. Publish and prepare an explicit tagged release se
 before installation; a dirty workspace build is never a release image.
 
 Install Platform first, then Core App before Billing. Other registered targets can
-be installed independently after Platform. Each operation holds the shared
-operator lock and writes its own stage log under `.codeship/apps/<name>/`.
+be installed independently after Platform. Coordinate each operation with the user and any running deployment owner. Each operation writes its own stage log under `.codeship/apps/<name>/`.
 
 | Service | Browser address | Data database |
 | --- | --- | --- |
@@ -73,3 +72,6 @@ Do not run a later dependent stage after a failed prerequisite. Keep the partial
 state and stage log for recovery. Infrastructure engine updates are separate.
 
 Platform now publishes only loopback 14385:4385. Its update probes a changed port before effects, preserves every unselected service definition/volume/network, replaces only Platform with --no-deps, and verifies sibling container identities. Installed CodeShip metrics binding is resolved from Compose so a separate CodeShip port migration is supported. Platform >=1.0.7 follows the confirmed optional password-change policy; legacy images retain their strict startup flag.
+
+
+Deployment coordination (user, 20 November 2026): deployment locks are not the scheduling authority. Follow the user's explicit current instruction for which app, target and time; coding, testing, release publication and a previous deployment do not authorize another deployment. Before deploying, coordinate with the user and any running deployment owner. Identify shared Compose files, operator checkouts/state, networks, ports, databases/migrations and infrastructure; touch shared resources only when needed for the approved deployment and after coordination. Parallel independent work is allowed; do not claim conflicting shared deployments are safe. Preserve other operations and do not clear existing lock files or stop a running deployment. No automatic rollout. Existing installed releases retain their behavior until an explicitly authorized release/update.

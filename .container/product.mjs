@@ -1,0 +1,3 @@
+const products=Object.freeze({codeship:{owner:'devkit/codeship',state:'devkits/state.json',lifecycle:'.container/devkits/lifecycle.ts'},codeitz:{owner:'devkit/codeitz',state:'devkits/state.json',lifecycle:'.container/devkits/lifecycle.ts'},uiux:{owner:'devkit/uiux',state:'devkits/state.json',lifecycle:'.container/devkits/lifecycle.ts'},platform:{owner:'apps/platform',state:'apps/platform/state.json',lifecycle:'.container/apps/lifecycle.ts'}});
+export function product(name){const entry=Object.hasOwn(products,name)?products[name]:null;if(!entry)throw Error('Unsupported deployment product');return {...entry,repository:'CODEXSUN/'+name};}
+export function installedProduct(name,state){return name==='platform'?state:state?.services?.[name];}

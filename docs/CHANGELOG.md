@@ -2,13 +2,30 @@
 
 ## Version State
 
-Current version: 1.0.28
+Current version: 1.0.29
 
-Release tag: v-1.0.28
+Release tag: v-1.0.29
 
-Changelog label: v 1.0.28
+Changelog label: v 1.0.29
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.29
+
+### [v 1.0.29] 2026-11-20 - Automate selected setup and updates with scoped Platform recovery
+
+#### Database Changes
+
+- Database update: Yes (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.29.
+- Remove deployment file/flock gates and add forward migration removing the per-target deployment index; preserve request deduplication and approval.
+- Add selected Platform/Devkit setup/update transport for registered local Docker and Hostinger, explicit product selection, bound operator state and verified current-release no-op.
+- Stop Platform updates from importing or initializing missing ownership; require every current master/tenant recovery scope and offhost restore approval before VPS migration.
+- Add isolated Docker-in-Docker Platform setup/update harness; actual fresh12setup,13imageupdate/no-op and16migration with two independently restored scoped backups passed.
+- Validate routing before provisioning, require matching image-store/client versions, and support explicit hash-bound recorded replacement resume without direct repairs.
 
 ## v-1.0.28
 
