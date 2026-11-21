@@ -1,6 +1,11 @@
 import {isIP} from 'node:net';
 
 const publicHosts=['cx.codexsun.com','codeship.codexsun.com','codeitz.codexsun.com','uiux.codexsun.com'];
+/** Compose overrides the env file at runtime, including computed network peers. */
+export function effectiveIilabsPlatformEnvironment(saved,overrides){
+  if(!saved||!overrides||Array.isArray(overrides)||Object.values(saved).some(value=>typeof value!=='string')||Object.values(overrides).some(value=>typeof value!=='string'))throw Error('Review the effective Platform runtime configuration.');
+  return {...saved,...overrides};
+}
 /** Pure selected transform. No existing host, bridge or secret is removed. */
 export function iilabsPlatformEnvironment(environment,{tenantConnection,address}){
   if(!environment||!['single','multi'].includes(environment.PLATFORM_TENANCY_MODE)||environment.PLATFORM_TENANCY_MODE==='single'&&environment.PLATFORM_SINGLE_TENANT_CORPORATE_ID!=='codexsun')throw Error('Review the existing Platform tenancy configuration before IILabs installation.');

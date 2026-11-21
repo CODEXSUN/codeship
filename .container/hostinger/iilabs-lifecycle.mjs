@@ -15,7 +15,8 @@ import {startupHealth,startupBudget} from '../apps/startup-budget.mjs';
 import {ensureApplicationNetwork,applyIndependentNetwork} from '../apps/network-topology.mjs';
 import {probePlatformRuntime} from '../apps/platform-runtime-probe.mjs';
 import {validateIilabsOwner} from './iilabs-tenant.mjs';
-import {requireIilabsTarget,newIilabsEnvironment,iilabsServiceProfile,iilabsRuntimeEnvironment,withPlatformAvailability,iilabsPublicTransition} from './iilabs-policy.mjs';
+import {requireIilabsTarget,iilabsInstallationEnvironment,iilabsServiceProfile,iilabsRuntimeEnvironment,withPlatformAvailability,iilabsPublicTransition,iilabsSetupResume} from './iilabs-policy.mjs';
+import {effectiveIilabsPlatformEnvironment} from './iilabs-platform.mjs';
 import {prepareIilabsPublicRecovery,withIilabsFirstReplacement,approvedPublicRuntimeSha256} from './iilabs-public-recovery.mjs';
 
 const source=fileURLToPath(new URL('../../',import.meta.url));
@@ -44,15 +45,17 @@ const readDocker=name=>JSON.parse(docker(['inspect',name]))[0];
 async function main(){
   const [mode,name,...args]=process.argv.slice(2);const target=read(path.join(state,'target.json'));
   requireIilabsTarget({platform:process.platform,hostname:os.hostname(),uid:process.getuid?.(),root:fs.realpathSync(source),target,entry:process.env.CODESHIP_RELEASED_UPDATE_ENTRY});
-  if(name!=='iilabs'||!['setup','update','verify'].includes(mode)||mode!=='verify'&&(args.length!==2||args[0]!=='--release-set'))throw Error('Use selected IILabs setup/update entry.');
+  const resumeId=args.length===4&&args[2]==='--resume'?args[3]:undefined;
+  if(name!=='iilabs'||!['setup','update','verify'].includes(mode)||mode==='verify'&&args.length||mode!=='verify'&&(args[0]!=='--release-set'||args.length!==2&&!(mode==='setup'&&resumeId)))throw Error('Use selected IILabs setup/update entry.');
   fs.mkdirSync(privateRoot,{recursive:true,mode:0o700});
   const prior=fs.existsSync(stateFile)?read(stateFile):undefined;
   if(mode==='verify'){if(!prior)throw Error('IILabs is not installed.');await verify(prior);return;}
   if(mode==='setup'&&prior||mode==='update'&&!prior)throw Error('Selected IILabs installation state differs.');
-  if(mode==='setup'&&fs.existsSync(path.join(root,'ownership.json')))throw Error('IILabs setup already started; inspect retained partial state, never reset/repeat provisioning.');
+  if(mode==='setup'&&!resumeId&&fs.existsSync(path.join(root,'ownership.json')))throw Error('IILabs setup already started; inspect retained partial state, never reset/repeat provisioning.');
   const set=read(path.resolve(args[1])),manifest=set.services?.iilabs;if(set.schema!==1||set.source!=='github'||!manifest)throw Error('Approved IILabs release missing.');
   validateManifest(manifest,{owner:'apps/iilabs',repository:'CODEXSUN/iilabs',tag:manifest.tag,commit:manifest.commit});
   const image=await resolveReleaseImage(manifest,docker,path.join(state,'releases/images'));const label=JSON.parse(docker(['image','inspect',image,'--format','{{json .Config.Labels}}']));if(label['org.opencontainers.image.revision']!==manifest.commit||label['org.opencontainers.image.version']!==manifest.version)throw Error('Approved IILabs image labels differ.');stage('release-image','passed');
+  if(resumeId){const checkpoint=iilabsSetupResume({run:resumeId,ownership:read(path.join(root,'ownership.json')),manifest,stages:fs.readFileSync(path.join(root,'stages.jsonl'),'utf8').trim().split('\n').map(JSON.parse),backendState:prior});const backup=path.join(privateRoot,'master-before-'+resumeId+'.dump');if(createHash('sha256').update(fs.readFileSync(backup)).digest('hex')!==checkpoint.sha256)throw Error('Original checked master recovery changed.');}
   const publicRoot=path.join(state,'apps/iilabs-public');
   let publicRecovery,publicRecoveryDirectory;
   if(!prior){
@@ -75,11 +78,13 @@ async function main(){
       stage('public-transition','prepared',{recovery,homepageUnchanged:true});
     }
   }
-  requireRawCompose(docker(['compose','version','--short']));await requireReady(14385);
+  requireRawCompose(docker(['compose','version','--short']));
+  if(resumeId){if(readDocker('platform').State.Health?.Status!=='healthy')throw Error('Recorded configuration resume requires healthy same-image Platform.');}else await requireReady(14385);
   const baseline=fingerprintContainers();save(path.join(privateRoot,'siblings-'+run+'.json'),baseline);
   const platformState=read(path.join(platformRoot,'state.json'));const platformImage=readDocker('platform').Image;if(platformImage!==platformState.imageId)throw Error('Existing Platform release image differs.');
-  const platformEnvironment=parseEnv(fs.readFileSync(platformEnvFile,'utf8'));
+  const savedPlatformEnvironment=parseEnv(fs.readFileSync(platformEnvFile,'utf8'));
   const platformDefinition=read(platformComposeFile),service=platformDefinition.services.platform;if(!service?.networks?.backend||service.network_mode)throw Error('Existing independent Platform topology required.');
+  const platformEnvironment=resumeId?effectiveIilabsPlatformEnvironment(parseEnv(fs.readFileSync(path.join(privateRoot,'platform-before-'+resumeId,'runtime.env'),'utf8')),read(path.join(privateRoot,'platform-before-'+resumeId,'compose.json')).services.platform.environment):effectiveIilabsPlatformEnvironment(savedPlatformEnvironment,service.environment);
   const infra=readDocker('cxapp-postgres');const infraEnv=Object.fromEntries(infra.Config.Env.map(value=>{const i=value.indexOf('=');return [value.slice(0,i),value.slice(i+1)];}));
   if(infra.Config.Labels?.['com.docker.compose.project']!=='cxapp-postgres'||infra.Config.Labels?.['com.docker.compose.service']!=='postgres'||infraEnv.POSTGRES_PASSWORD_FILE!=='/run/secrets/postgres_password')throw Error('Registered PostgreSQL ownership/credential source differs.');
   const adminPassword=cp.execFileSync('docker',['exec','cxapp-postgres','cat','/run/secrets/postgres_password'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).replace(/\r?\n$/,'');
@@ -91,18 +96,20 @@ async function main(){
   const runner=(command,input)=>JSON.parse(docker(['run','--rm','-i','--network','cxapp-network','--mount','type=bind,source='+runtime+',target=/run/codeship,readonly','-e','CODESHIP_IILABS_PROVISION=1','-e','PLATFORM_BIND_MODE=docker-direct','--entrypoint','node',platformImage,'/run/codeship/iilabs-provision.mjs',command],JSON.stringify(input)));
   const {iilabsPlatformEnvironment,verifyExistingPlatformHosts}=await import('./iilabs-platform.mjs');
   const oldHosts=runner('hosts',{masterURL:platformEnvironment.PLATFORM_MASTER_DATABASE_URL});verifyExistingPlatformHosts(oldHosts);
-  let environment=prior?parseEnv(fs.readFileSync(envFile,'utf8')):newIilabsEnvironment();
-  let tenantConnection=platformEnvironment.PLATFORM_TENANT_IILABS_DATABASE_URL;
+  let environment=iilabsInstallationEnvironment(fs.existsSync(envFile)?parseEnv(fs.readFileSync(envFile,'utf8')):undefined,{installed:!!prior,resume:!!resumeId});
+  let tenantConnection=resumeId?parseEnv(fs.readFileSync(path.join(privateRoot,'tenant.env'),'utf8')).PLATFORM_TENANT_IILABS_DATABASE_URL:platformEnvironment.PLATFORM_TENANT_IILABS_DATABASE_URL;
   let owner;
   if(!prior){
     const file=process.env.CODESHIP_IILABS_OWNER_FILE;if(file!==path.join(privateRoot,'owner.env')||!fs.lstatSync(file).isFile()||fs.lstatSync(file).isSymbolicLink()||(fs.statSync(file).mode&0o077)!==0)throw Error('Use the protected transferred owner file.');
     const values=parseEnv(fs.readFileSync(file,'utf8'));owner=Object.fromEntries(['USERNAME','EMAIL','NAME','PASSWORD'].map(key=>[key,values['IILABS_OWNER_'+key]]));validateIilabsOwner(owner);
+    if(!resumeId){
     const u=new URL('postgresql://platform_iilabs@postgres:5432/platform_iilabs');u.password=randomBytes(32).toString('hex');tenantConnection=u.href;
     if(platformEnvironment.PLATFORM_TENANT_IILABS_DATABASE_URL)throw Error('New tenant connection already exists; preserve its ownership.');
     fs.writeFileSync(envFile,serializeDeploymentEnvironment(environment),{mode:0o600});
     save(path.join(root,'ownership.json'),{schema:1,target:'hostinger-914719',status:'provisioning',databases:['app_iilabs','platform_iilabs'],tenant:'iilabs',imageId:manifest.imageId,run,at:new Date().toISOString()});
     fs.writeFileSync(path.join(privateRoot,'tenant.env'),serializeDeploymentEnvironment({PLATFORM_TENANT_IILABS_DATABASE_URL:tenantConnection}),{mode:0o600,flag:'wx'});
     runner('databases',{admin,settings:{...environment,PLATFORM_TENANT_IILABS_DATABASE_URL:tenantConnection}});stage('fresh-databases','passed',{dataImported:false});
+    }else if(savedPlatformEnvironment.PLATFORM_TENANT_IILABS_DATABASE_URL!==tenantConnection||savedPlatformEnvironment.PLATFORM_TENANCY_MODE!=='multi')throw Error('Recorded partial tenant configuration differs; no provisioning repeated.');
   }
   fs.writeFileSync(envFile,serializeDeploymentEnvironment(environment),{mode:0o600});
   const dbTool=command=>docker(['run','--rm','--user','0','--network','cxapp-network','--mount','type=bind,source='+envFile+',target=/run/app.env,readonly','--mount','type=bind,source='+runtime+',target=/run/codeship,readonly','--entrypoint','node',image,'--env-file=/run/app.env','/run/codeship/business-database.mjs',command]);
@@ -130,7 +137,7 @@ async function main(){
     };
     compose(platformComposeFile,['stop','platform']);
     try{
-      const result=await withPlatformAvailability({backup:()=>checkedBackup('platform_master','master'),mutate:()=>runner('tenant',{owner,masterURL:platformEnvironment.PLATFORM_MASTER_DATABASE_URL,settings:{PLATFORM_TENANT_IILABS_DATABASE_URL:tenantConnection}}),activate,restore:async()=>{compose(platformComposeFile,['start','platform']);await requireReady(14385);}});
+      const result=resumeId?(await activate(),runner('tenant-status',{owner,masterURL:platformEnvironment.PLATFORM_MASTER_DATABASE_URL,settings:{PLATFORM_TENANT_IILABS_DATABASE_URL:tenantConnection}})):await withPlatformAvailability({backup:()=>checkedBackup('platform_master','master'),mutate:()=>runner('tenant',{owner,masterURL:platformEnvironment.PLATFORM_MASTER_DATABASE_URL,settings:{PLATFORM_TENANT_IILABS_DATABASE_URL:tenantConnection}}),activate,restore:async()=>{compose(platformComposeFile,['start','platform']);await requireReady(14385);}});
       environment.IILABS_PLATFORM_TENANT_ID=result.tenantId;stage('new-tenant','passed',{tenantId:result.tenantId,dataImported:false});stage('platform-configuration','passed',{sameImage:true});
     }catch(error){stage('platform-configuration','failed',{recovery});throw error;}
   }
@@ -167,6 +174,7 @@ async function main(){
   execute(process.execPath,['scripts/register-devkits.ts','--environment','vps'],payload);
   docker(['exec','-i','codeship','node','scripts/register-devkits.ts','--environment','vps'],payload);
   save(stateFile,{...manifest,image:image,imageId:manifest.imageId,runtimeMode:'full-app',backendConfigured:true,migrations:current,compose:composeFile,tenantId:environment.IILABS_PLATFORM_TENANT_ID,updatedAt:new Date().toISOString()});stage('release','succeeded',{version:manifest.version,port:14435,unselectedContainersPreserved:baseline.length});
+  save(path.join(root,'ownership.json'),{...read(path.join(root,'ownership.json')),status:'verified',tenantId:environment.IILABS_PLATFORM_TENANT_ID,verifiedAt:new Date().toISOString()});
   if(!prior&&fs.existsSync(path.join(publicRoot,'state.json'))){const previous=read(path.join(publicRoot,'state.json'));save(path.join(publicRoot,'state.json'),{...previous,runtimeMode:'superseded-by-full-app',backendConfigured:true,supersededBy:stateFile,updatedAt:new Date().toISOString()});}
 }
 main().catch(()=>{if(fs.existsSync(root))stage('release','failed');console.error('Selected IILabs installation stopped. Preserve private ownership, backup and prior image; correct locally before retrying.');process.exitCode=1;});

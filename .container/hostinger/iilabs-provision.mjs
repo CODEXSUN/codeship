@@ -57,6 +57,16 @@ async function main(){
       console.log(JSON.stringify((await sql`SELECT d.hostname_key AS hostname,d.verification_status,d.active,t.code AS tenant_code FROM tenant_domains d JOIN tenants t ON t.id=d.tenant_id WHERE d.hostname_key IN ('cx.codexsun.com','codeship.codexsun.com','codeitz.codexsun.com','uiux.codexsun.com') ORDER BY d.hostname_key`.execute(master)).rows));return;
     }
     const profile=iilabsTenantProfile(input.owner,input.settings.PLATFORM_TENANT_IILABS_DATABASE_URL);target=openTenantDatabase(profile.connection);
+    if(mode==='tenant-status'){
+      const {sql}=require('kysely');
+      const tenants=(await sql`SELECT t.public_id FROM tenants t JOIN tenant_databases d ON d.tenant_id=t.id WHERE t.code_key='iilabs' AND t.status='active' AND d.database_name='platform_iilabs' AND d.connection_secret_ref='env:PLATFORM_TENANT_IILABS_DATABASE_URL' AND d.deployment_key='hostinger-914719' AND d.status='ready' AND d.active AND t.active`.execute(master)).rows;
+      const identity=(await sql`SELECT public_id FROM tenant_identity_scope`.execute(target)).rows;
+      const users=(await sql`SELECT u.public_id,c.password_hash FROM users u JOIN user_credentials c ON c.user_id=u.id WHERE u.username_key='codexsun' AND u.email_key='iilabs@admin.com' AND u.active AND u.status='active'`.execute(target)).rows;
+      const count=(await sql`SELECT count(*)::int AS n FROM users`.execute(target)).rows[0].n;
+      const {verifyPassword}=await import(base+'src/api/modules/identity/password.ts');
+      if(tenants.length!==1||identity.length!==1||identity[0].public_id!==tenants[0].public_id||users.length!==1||count!==1||!await verifyPassword(profile.account.password,users[0].password_hash))throw Error('Recorded new tenant identity cannot be adopted.');
+      console.log(JSON.stringify({tenantId:tenants[0].public_id,ownerId:users[0].public_id,verified:true}));return;
+    }
     if(mode==='tenant')console.log(JSON.stringify(await prepareIilabsTenant(master,target,profile,process.env.CODESHIP_IILABS_STAGING==='1'?{deploymentKey:'ubuntu-staging'}:{})));
     else if(mode==='owner')console.log(JSON.stringify(await grantNewIilabsOwner(master,target,input.tenantId)));
     else throw Error('Unsupported selected provisioning mode.');

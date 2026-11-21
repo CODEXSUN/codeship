@@ -38,7 +38,11 @@ export function validateUpdateTicket(ticket,name){
  if(name==='iilabs'&&ticket.runtimeMode==='full-app'&&ticket.action==='setup'&&!ticket.iilabsOwner)throw Error('Private first-owner configuration required');
  if(ticket.preserveIdentity!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined||ticket.priorRecovery!==undefined)throw Error('Identity preservation is restricted to a Platform update');validateIdentityPreservation(ticket.preserveIdentity);if(ticket.manifest?.version!=='1.0.16'||ticket.manifest.imageId!==platformRetirementImage)throw Error('Identity preservation requires the verified Platform16 release');}
  if(ticket.priorRecovery!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined)throw Error('Prior recovery is restricted to an explicit Platform update');validatePriorRecoveryProof(ticket.priorRecovery);}
- if(ticket.resumeId!==undefined&&((ticket.action??'update')!=='update'||name!=='platform'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(ticket.resumeId)))throw Error('Invalid recorded resume operation');
+ if(ticket.resumeId!==undefined){
+  const platform=name==='platform'&&(ticket.action??'update')==='update'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(ticket.resumeId);
+  const iilabs=name==='iilabs'&&ticket.runtimeMode==='full-app'&&ticket.action==='setup'&&/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/.test(ticket.resumeId);
+  if(!platform&&!iilabs)throw Error('Invalid recorded resume operation');
+ }
  if(!['setup','update'].includes(ticket.action??'update'))throw Error('Invalid deployment action');
  if(ticket.schema!==1||ticket.selected!==name||ticket.source!=='github'||!/^\d+\.\d+\.\d+$/.test(ticket.tooling?.version)||ticket.tooling.tag!=='v-'+ticket.tooling.version||!/^[a-f0-9]{40}$/.test(ticket.tooling.commit??''))throw Error('Invalid approved update ticket');
  const age=Date.now()-Date.parse(ticket.approvedAt);if(!Number.isFinite(age)||age< -30000||age>30*60*1000)throw Error('Update approval expired; resolve GitHub again locally');

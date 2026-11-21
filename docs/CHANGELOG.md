@@ -2,13 +2,29 @@
 
 ## Version State
 
-Current version: 1.0.41
+Current version: 1.0.42
 
-Release tag: v-1.0.41
+Release tag: v-1.0.42
 
-Changelog label: v 1.0.41
+Changelog label: v 1.0.42
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.42
+
+### [v 1.0.42] 2026-11-21 - Preserve effective Platform peers and resume checked IILabs setup
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.42.
+- Merge Compose environment overrides before transforming Platform configuration, preserving computed peers and existing domains/secrets.
+- Add explicit guarded resume for the recorded first IILabs configuration failure only: verify ownership, original checked backup and unchanged public frontend; reuse every existing private credential; skip database/tenant provisioning and attest the real tenant/sole owner using original Platform password verification.
+- Keep same-image Platform availability and public-first recovery; refuse normal updates, unknown partial states or a completed backend as setup recovery.
+- Reproduced Compose-only peer storage on Ubuntu staging; same-image host readiness, existing devkit logins and IILabs login/save/reopen passed. Focused policy tests and full207 tests passed before one additional credential-retention test, which also passes.
 
 ## v-1.0.41
 

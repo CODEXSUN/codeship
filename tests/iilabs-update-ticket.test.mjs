@@ -21,3 +21,8 @@ test('private owner transfer uses exact dotenv roundtrip without interpolation',
  const fields={IILABS_OWNER_PASSWORD:'Fixture-$with#marks\\and"quote',IILABS_OWNER_NAME:'Fixture owner'};
  assert.deepEqual({...parseEnv(serializeDeploymentEnvironment(fields))},fields);
 });
+test('IILabs resume is an explicit first-backend setup checkpoint, separate from Platform UUID recovery',()=>{
+ const t={...ticket(),resumeId:'2026-11-21T06-00-07-791Z'};assert.equal(validateUpdateTicket(t,'iilabs'),t);
+ assert.equal(parseSelectedUpdateArguments('iilabs',['--setup','--backend','--resume',t.resumeId]).resumeId,t.resumeId);
+ for(const patch of [{action:'update'},{runtimeMode:undefined},{resumeId:'12345678-1234-1234-1234-123456789abc'},{resumeId:'../other'}])assert.throws(()=>validateUpdateTicket({...t,...patch},'iilabs'));
+});

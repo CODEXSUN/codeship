@@ -18,9 +18,26 @@ export function iilabsPublicTransition({publicState,container,manifest}) {
 export function requireIilabsTarget({platform,hostname,uid,root,target,entry}) {
   if(platform!=='linux'||hostname!=='srv914719'||uid!==0||root!=='/home/codebiz/devkit/codeship'||entry!=='1'||target?.id!=='hostinger-914719'||target.host!=='69.62.81.166'||target.binding!=='127.0.0.1'||target.dataPolicy!=='fresh'||target.infraNetwork!=='cxapp-network')throw Error('Use the released selected IILabs VPS entry.');
 }
+export function iilabsSetupResume({run,ownership,manifest,stages,backendState}){
+  if(backendState||!/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/.test(run??'')||ownership?.run!==run||ownership.target!=='hostinger-914719'||ownership.status!=='provisioning'||ownership.imageId!==manifest.imageId||ownership.tenant!=='iilabs'||JSON.stringify(ownership.databases)!==JSON.stringify(['app_iilabs','platform_iilabs']))throw Error('Selected partial IILabs ownership cannot be resumed.');
+  const rows=stages.filter(row=>row.run===run);
+  for(const stage of ['fresh-databases','migration','recovery-backup'])if(!rows.some(row=>row.stage===stage&&row.status==='passed'))throw Error('Required checked setup boundary is missing.');
+  if(!rows.some(row=>row.stage==='platform-configuration'&&row.status==='failed')||rows.some(row=>row.stage==='platform-admission'||row.stage==='release'&&row.status==='succeeded'))throw Error('Only the recorded first configuration failure may resume.');
+  const backup=rows.find(row=>row.stage==='recovery-backup'&&row.status==='passed'&&row.database==='platform_master');
+  if(backup?.offHostRestoreVerified!==true||!/^[a-f0-9]{64}$/.test(backup.sha256??''))throw Error('The original master recovery was not verified.');
+  return {sha256:backup.sha256};
+}
 export function newIilabsEnvironment() {
   const url=(role,database)=>{const value=new URL('postgresql://postgres:5432/'+database);value.username=role;value.password=randomBytes(32).toString('hex');return value.href;};
   return {NODE_ENV:'production',CODESHIP_CONTAINER_MODE:'1',CODESHIP_APP_NAME:'iilabs',IILABS_HOST:'127.0.0.1',IILABS_PORT:'4435',IILABS_WEB_PORT:'14435',IILABS_PLATFORM_AUTH:'1',IILABS_PLATFORM_ORIGIN:'http://127.0.0.1:4385',IILABS_BROWSER_ORIGINS:JSON.stringify(['https://iilabs.in','http://127.0.0.1:14435']),IILABS_PLATFORM_SERVICE_TOKEN:randomBytes(32).toString('hex'),IILABS_VAULT_KEY:randomBytes(32).toString('hex'),IILABS_DATABASE_URL:url('app_iilabs_runtime','app_iilabs'),IILABS_MIGRATION_DATABASE_URL:url('app_iilabs_migrator','app_iilabs'),IILABS_DEMO_MODE:'0',IILABS_SYNC_ENABLED:'0'};
+}
+export function iilabsInstallationEnvironment(existing,{installed=false,resume=false}={}){
+  if(installed||resume){
+    if(!existing||['IILABS_DATABASE_URL','IILABS_MIGRATION_DATABASE_URL','IILABS_VAULT_KEY','IILABS_PLATFORM_SERVICE_TOKEN'].some(key=>typeof existing[key]!=='string'||!existing[key]))throw Error('Retain the existing private IILabs credentials before resuming.');
+    return {...existing};
+  }
+  if(existing)throw Error('Unowned existing private settings require review, never implicit rotation.');
+  return newIilabsEnvironment();
 }
 export function iilabsServiceProfile(service,environment,manifest) {
   if(service.appKey!=='iilabs'||!Array.isArray(service.permissionKeys)||!service.permissionKeys.includes('iilabs/agency:manage')||!service.permissionKeys.includes('iilabs/workspace:read')||!/^sha256:[a-f0-9]{64}$/.test(manifest.imageId)||!/^ghcr.io\/codexsun\/iilabs@sha256:[a-f0-9]{64}$/.test(manifest.image))throw Error('IILabs release/service identity differs.');
