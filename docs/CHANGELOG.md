@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.39
+Current version: 1.0.40
 
-Release tag: v-1.0.39
+Release tag: v-1.0.40
 
-Changelog label: v 1.0.39
+Changelog label: v 1.0.40
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.40
+
+### [v 1.0.40] 2026-11-21 - Reconcile private Platform transport before local updates
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.40.
+- Reconcile exact managed loopback browser origins before selected local setup/update, activating Platform19’s original private SDK service-context policy.
+- Preserve accounts, grants, database schemas and approved image; retain private configuration recovery and restore configuration if admission fails. Adapter rejects Linux/cloud targets.
+- Verified original local Codeitz18 login, workspace and both task/chat streams after correction; repeated reconciliation preserves the same Platform container. Three policy tests and typecheck pass.
 
 ## v-1.0.39
 

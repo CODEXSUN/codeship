@@ -7,6 +7,7 @@ import {product} from './product.mjs';
 import {latestRelease,updateDecision} from './latest-release.mjs';
 import {installedProduct} from './product.mjs';
 import {assertCleanCheckout} from './hostinger/clean-checkout.mjs';
+import {ensureLocalPlatformTransport} from './apps/local-platform-transport.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 async function main(){
  const [action,name,...args]=process.argv.slice(2);const descriptor=product(name);
@@ -19,6 +20,7 @@ async function main(){
  assertCleanCheckout(root,{tag:tooling.manifest.tag,commit:tooling.manifest.commit});
  const state=path.join(root,'.codeship');if(!fs.existsSync(path.join(state,'data/codeship.sqlite'))||!fs.existsSync(path.join(state,'keys/vault.key')))throw Error('Register the existing local operator state first; no implicit data import');
  if(fs.existsSync(path.join(state,'target.json'))){const target=JSON.parse(fs.readFileSync(path.join(state,'target.json'),'utf8'));if(target.id!=='local-docker')throw Error('Local operator target differs');}
+ if(!args.includes('--check'))await ensureLocalPlatformTransport(root);
  const installedFile=path.join(state,descriptor.state);const installed=fs.existsSync(installedFile)?installedProduct(name,JSON.parse(fs.readFileSync(installedFile,'utf8'))):undefined;
  if(action==='setup'&&installed)throw Error(name+' is installed; use update.sh; no reset performed');
  if(action==='update'&&!installed)throw Error(name+' is not installed; use setup.sh separately');
