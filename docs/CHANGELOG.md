@@ -2,13 +2,29 @@
 
 ## Version State
 
-Current version: 1.0.42
+Current version: 1.0.43
 
-Release tag: v-1.0.42
+Release tag: v-1.0.43
 
-Changelog label: v 1.0.42
+Changelog label: v 1.0.43
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.43
+
+### [v 1.0.43] 2026-11-21 - Deploy distinct shared login roles with safe image-only Platform updates
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.43.
+- Pin verified shared UI0.1.23 for blue Admin/shield, green SA/crown and distinct user/person login presentation through the original shared access gate.
+- Add explicit Platform --image-only update mode to preserve installed multi-tenant credentials/routing from the effective private file and Compose overrides, refusing setup, recovery combinations and pending migrations.
+- Add local/staging-only browser acceptance for all login routes, role badges, submit icons, light/dark colors and hidden IILabs role-switch links; production browser tests are refused.
+- CodeShip typecheck and210 tests pass; shared UI owner verified locked typecheck/build122UI+4tool tests and navy-theme visual fixture. Candidate app-image/local/staging/production outcomes are recorded separately after admission.
 
 ## v-1.0.42
 

@@ -47,7 +47,7 @@ export async function receiveUpdate(name,ticket,approve){
  linkExisting(root+'/.codeship',stateRoot);
  linkExisting(root+'/node_modules',target.operator+'/node_modules');
  cleanSource(ticket.tooling);
- const env={...process.env,CODESHIP_SQLITE_FILE:stateRoot+'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:stateRoot+'/keys/vault.key',CODESHIP_DEVKIT_SCRIPT_ENTRY:'1',CODESHIP_APP_SCRIPT_ENTRY:'1',CODESHIP_RELEASED_UPDATE_ENTRY:'1',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_RELEASE_ASSETS_JSON:JSON.stringify({[ticket.manifest.repository+'@'+ticket.manifest.tag]:ticket.archiveUrl}),CODESHIP_KEEP_RELEASE_ARCHIVES:'0'};
+ const env={...process.env,CODESHIP_SQLITE_FILE:stateRoot+'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:stateRoot+'/keys/vault.key',CODESHIP_DEVKIT_SCRIPT_ENTRY:'1',CODESHIP_APP_SCRIPT_ENTRY:'1',CODESHIP_RELEASED_UPDATE_ENTRY:'1',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_RELEASE_ASSETS_JSON:JSON.stringify({[ticket.manifest.repository+'@'+ticket.manifest.tag]:ticket.archiveUrl}),CODESHIP_KEEP_RELEASE_ARCHIVES:'0',CODESHIP_PLATFORM_IMAGE_ONLY:ticket.imageOnly?'1':'0'};
  await ensureReleasedHostMetrics(root,ticket.tooling);
  if(current){
   const child=cp.fork(descriptor.lifecycle,['verify',name],{cwd:root,env,stdio:['ignore','inherit','inherit','ipc']});const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});if(code!==0)throw Error('Current release readiness failed');console.log(name+': already latest; readiness verified; no replacement/migration');return;
@@ -94,7 +94,7 @@ async function sendUpdate(name,ticket){
 }
 async function main(){
  const [name,...args]=process.argv.slice(2);product(name);
- const {action,releaseTag,resumeId,priorRecoveryFile,preserveIdentityFile,mode,id,runtimeMode}=parseSelectedUpdateArguments(name,args);
+ const {action,releaseTag,resumeId,priorRecoveryFile,preserveIdentityFile,mode,id,runtimeMode,imageOnly}=parseSelectedUpdateArguments(name,args);
  if(mode==='--export-recovery'){await exportRecovery(root,name,id);return;}
  if(mode==='--receive'){
   const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});const iterator=lines[Symbol.asyncIterator]();
@@ -117,7 +117,7 @@ async function main(){
   if(!stat.isFile()||stat.isSymbolicLink()||stat.size>8192)throw Error('Use the protected bounded IILabs owner file');
   const values=parseEnv(fs.readFileSync(file,'utf8'));iilabsOwner=Object.fromEntries(['USERNAME','EMAIL','NAME','PASSWORD'].map(key=>[key,values['IILABS_OWNER_'+key]]));validateIilabsOwner(iilabsOwner);
  }
- const ticket={schema:1,source:'github',selected:name,action,...(runtimeMode?{runtimeMode}:{}),...(iilabsOwner?{iilabsOwner}:{}),...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),...(preserveIdentity?{preserveIdentity}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
+ const ticket={schema:1,source:'github',selected:name,action,...(imageOnly?{imageOnly:true}:{}),...(runtimeMode?{runtimeMode}:{}),...(iilabsOwner?{iilabsOwner}:{}),...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),...(preserveIdentity?{preserveIdentity}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
  console.log(name+': approved successful stable GitHub release '+selected.manifest.tag);
  if(mode==='--check')return;

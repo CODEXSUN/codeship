@@ -24,16 +24,18 @@ export function parseSelectedUpdateArguments(name,args){
  product(name);const flags=[...args];const take=flag=>{const index=flags.indexOf(flag);if(index<0)return undefined;const value=flags[index+1];if(!value||value.startsWith('--')||flags.indexOf(flag,index+1)>=0)throw Error('Invalid '+flag+' option');flags.splice(index,2);return value;};
  const setup=flags.includes('--setup');if(setup){flags.splice(flags.indexOf('--setup'),1);if(flags.includes('--setup'))throw Error('Duplicate setup option');}
  const backend=flags.includes('--backend');if(backend){flags.splice(flags.indexOf('--backend'),1);if(name!=='iilabs'||flags.includes('--backend'))throw Error('Select IILabs backend explicitly once');}
+ const imageOnly=flags.includes('--image-only');if(imageOnly){flags.splice(flags.indexOf('--image-only'),1);if(name!=='platform'||setup||flags.includes('--image-only'))throw Error('Image-only mode is scoped to an existing Platform update');}
  const action=setup?'setup':'update',releaseTag=take('--tag'),resumeId=take('--resume'),priorRecoveryFile=take('--recover-prior'),preserveIdentityFile=take('--preserve-identity');
  if(preserveIdentityFile&&(name!=='platform'||action!=='update'||resumeId||priorRecoveryFile))throw Error('Identity preservation is only a Platform update without resume or prior recovery');
  if(priorRecoveryFile&&(name!=='platform'||action!=='update'||resumeId||!releaseTag))throw Error('Prior recovery requires Platform update with its explicit prior --tag and no resume');
  const [mode,id]=flags;
  if((releaseTag||priorRecoveryFile||preserveIdentityFile)&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
  if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
- return {action,releaseTag,resumeId,priorRecoveryFile,mode,id,...(preserveIdentityFile?{preserveIdentityFile}:{}),...(backend?{runtimeMode:'full-app'}:{})};
+ return {action,releaseTag,resumeId,priorRecoveryFile,mode,id,...(preserveIdentityFile?{preserveIdentityFile}:{}),...(backend?{runtimeMode:'full-app'}:{}),...(imageOnly?{imageOnly:true}:{})};
 }
 export function validateUpdateTicket(ticket,name){
  const descriptor=deploymentProduct(name,ticket.runtimeMode);
+ if(ticket.imageOnly!==undefined&&(ticket.imageOnly!==true||name!=='platform'||(ticket.action??'update')!=='update'||ticket.resumeId||ticket.preserveIdentity||ticket.priorRecovery))throw Error('Image-only mode requires an ordinary Platform update');
  if(ticket.iilabsOwner!==undefined){if(name!=='iilabs'||ticket.runtimeMode!=='full-app'||ticket.action!=='setup')throw Error('Owner input is restricted to first IILabs backend setup');validateIilabsOwner(ticket.iilabsOwner);}
  if(name==='iilabs'&&ticket.runtimeMode==='full-app'&&ticket.action==='setup'&&!ticket.iilabsOwner)throw Error('Private first-owner configuration required');
  if(ticket.preserveIdentity!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined||ticket.priorRecovery!==undefined)throw Error('Identity preservation is restricted to a Platform update');validateIdentityPreservation(ticket.preserveIdentity);if(ticket.manifest?.version!=='1.0.16'||ticket.manifest.imageId!==platformRetirementImage)throw Error('Identity preservation requires the verified Platform16 release');}

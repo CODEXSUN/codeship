@@ -1,3 +1,4 @@
+import {effectiveIilabsPlatformEnvironment} from '../hostinger/iilabs-platform.mjs';
 import {assertPlatformRetirementPreflight,platformRetirementProbeCode,parseHistoricalIdentityMetadata} from './platform-retirement-preflight.mjs';
 import {probePlatformRuntime,platformRuntimeProbeSettings} from './platform-runtime-probe.mjs';
 import {preparePlatformReleaseAttempt,markPlatformAttemptReplaced,validatePlatformResume,validatePlatformResumeMigrations,completePlatformReleaseAttempt,type PlatformReleaseAttempt} from './platform-release-attempt.mjs';
@@ -110,6 +111,10 @@ try {
    const registration=await operator.db.selectFrom('applications').selectAll().where('owner','=','apps/platform').where('environment','=','local-docker').executeTakeFirst();
    if(registration?.encrypted_secrets)env=currentEnvironment(decryptSecrets(registration.public_id,registration.encrypted_secrets));
   }finally{await operator.db.destroy();}
+  if(process.env.CODESHIP_PLATFORM_IMAGE_ONLY==='1'){
+   if(mode!=='update'||!prior||!existsSync(markerFile)||!existsSync(envFile)||!existsSync(composeFile))throw Error('Image-only update requires an installed verified Platform');
+   env=effectiveIilabsPlatformEnvironment(parseEnv(await readFile(envFile,'utf8')),JSON.parse(await readFile(composeFile,'utf8')).services.platform.environment);
+  }
   const nativeSettings=!existsSync(markerFile)&&!hostinger?parseEnv(await readFile(path.join(workspaceRoot,'apps/platform/.env'),'utf8')):undefined;
   if(!Object.keys(env).length&&existsSync(envFile))env=Object.fromEntries(Object.entries(parseEnv(await readFile(envFile,'utf8'))).filter((entry):entry is [string,string]=>typeof entry[1]==='string'));
   const probeEnvironment=nativeSettings?Object.fromEntries(Object.entries(nativeSettings).filter((entry):entry is [string,string]=>typeof entry[1]==='string')):env;
@@ -189,6 +194,7 @@ try {
   assertPlatformRetirementPreflight(plans,()=>JSON.parse(docker(['run','--rm','--network',infraNetworkName,'--mount','type=bind,source='+envFile+',target=/run/platform.env,readonly','--entrypoint','node',manifest.image,'--env-file=/run/platform.env','--input-type=module','-e',platformRetirementProbeCode])),preservation);
   await stage('identity-retirement-preflight','passed');
   let retirementRecovery:any;
+  if(process.env.CODESHIP_PLATFORM_IMAGE_ONLY==='1'&&pending.length)throw Error('Image-only update refuses pending migrations; use a separately approved migration operation');
   await applyPlatformMigration({decision:{migrateRequired:pending.length>0,pending},installed:!!prior,requireOffhost:hostinger||!!preservation,requireChannel:requireRecoveryChannel,scopes:recoveryScopes,
    quiesce:async()=>{docker(['stop','platform']);},
    backup:async scope=>{const target=new URL(env[scope.key]);target.hostname='127.0.0.1';target.port=String(adminConfig.port);const file=path.join(privateRoot,scope.database+'-before-'+run+'.dump');execute(path.join(bin,'pg_dump'),['--format=custom','--no-owner','--no-privileges','--file',file],undefined,connectionEnv(target.href));return {file,sha256:createHash('sha256').update(await readFile(file)).digest('hex')};},
