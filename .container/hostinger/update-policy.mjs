@@ -1,7 +1,8 @@
 import {createHash} from 'node:crypto';
 import {parseHistoricalIdentityMetadata} from '../apps/platform-retirement-preflight.mjs';
 import {platformRetirementImage} from './platform-retirement-recovery.mjs';
-import {product} from '../product.mjs';
+import {product,deploymentProduct} from '../product.mjs';
+import {validateIilabsOwner} from './iilabs-tenant.mjs';
 import {validateManifest} from '../release-policy.mjs';
 import {validReleaseAssetUrl} from '../latest-release.mjs';
 export function validateIdentityPreservation(value){
@@ -22,16 +23,19 @@ export function validatePriorRecoveryProof(proof){
 export function parseSelectedUpdateArguments(name,args){
  product(name);const flags=[...args];const take=flag=>{const index=flags.indexOf(flag);if(index<0)return undefined;const value=flags[index+1];if(!value||value.startsWith('--')||flags.indexOf(flag,index+1)>=0)throw Error('Invalid '+flag+' option');flags.splice(index,2);return value;};
  const setup=flags.includes('--setup');if(setup){flags.splice(flags.indexOf('--setup'),1);if(flags.includes('--setup'))throw Error('Duplicate setup option');}
+ const backend=flags.includes('--backend');if(backend){flags.splice(flags.indexOf('--backend'),1);if(name!=='iilabs'||flags.includes('--backend'))throw Error('Select IILabs backend explicitly once');}
  const action=setup?'setup':'update',releaseTag=take('--tag'),resumeId=take('--resume'),priorRecoveryFile=take('--recover-prior'),preserveIdentityFile=take('--preserve-identity');
  if(preserveIdentityFile&&(name!=='platform'||action!=='update'||resumeId||priorRecoveryFile))throw Error('Identity preservation is only a Platform update without resume or prior recovery');
  if(priorRecoveryFile&&(name!=='platform'||action!=='update'||resumeId||!releaseTag))throw Error('Prior recovery requires Platform update with its explicit prior --tag and no resume');
  const [mode,id]=flags;
  if((releaseTag||priorRecoveryFile||preserveIdentityFile)&&['--receive','--export-recovery'].includes(mode))throw Error('Remote action uses the approved ticket release');
  if(mode&&!['--receive','--check','--export-recovery'].includes(mode)||flags.length>(mode==='--export-recovery'?2:1))throw Error('Use selected setup.sh/update.sh [--check]');
- return {action,releaseTag,resumeId,priorRecoveryFile,mode,id,...(preserveIdentityFile?{preserveIdentityFile}:{})};
+ return {action,releaseTag,resumeId,priorRecoveryFile,mode,id,...(preserveIdentityFile?{preserveIdentityFile}:{}),...(backend?{runtimeMode:'full-app'}:{})};
 }
 export function validateUpdateTicket(ticket,name){
- const descriptor=product(name);
+ const descriptor=deploymentProduct(name,ticket.runtimeMode);
+ if(ticket.iilabsOwner!==undefined){if(name!=='iilabs'||ticket.runtimeMode!=='full-app'||ticket.action!=='setup')throw Error('Owner input is restricted to first IILabs backend setup');validateIilabsOwner(ticket.iilabsOwner);}
+ if(name==='iilabs'&&ticket.runtimeMode==='full-app'&&ticket.action==='setup'&&!ticket.iilabsOwner)throw Error('Private first-owner configuration required');
  if(ticket.preserveIdentity!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined||ticket.priorRecovery!==undefined)throw Error('Identity preservation is restricted to a Platform update');validateIdentityPreservation(ticket.preserveIdentity);if(ticket.manifest?.version!=='1.0.16'||ticket.manifest.imageId!==platformRetirementImage)throw Error('Identity preservation requires the verified Platform16 release');}
  if(ticket.priorRecovery!==undefined){if((ticket.action??'update')!=='update'||name!=='platform'||ticket.resumeId!==undefined)throw Error('Prior recovery is restricted to an explicit Platform update');validatePriorRecoveryProof(ticket.priorRecovery);}
  if(ticket.resumeId!==undefined&&((ticket.action??'update')!=='update'||name!=='platform'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(ticket.resumeId)))throw Error('Invalid recorded resume operation');
@@ -42,8 +46,8 @@ export function validateUpdateTicket(ticket,name){
  if(!/^sha256:[a-f0-9]{64}$/.test(m.imageId??'')||m.archive?.name!=='image.tar.gz'||!/^[a-f0-9]{64}$/.test(m.archive?.sha256??'')||!validReleaseAssetUrl(ticket.archiveUrl))throw Error('Invalid approved image archive');
  return ticket;
 }
-export function remoteUpdateCommand(tooling,name,action='update'){
- product(name);
+export function remoteUpdateCommand(tooling,name,action='update',runtimeMode){
+ deploymentProduct(name,runtimeMode);
  if(!['setup','update'].includes(action)||!/^v-\d+\.\d+\.\d+$/.test(tooling.tag)||!/^[a-f0-9]{40}$/.test(tooling.commit))throw Error('Invalid deployment source');
  const script=['set -eu','export GIT_TERMINAL_PROMPT=0','cd /home/codebiz/devkit/codeship',
   '[ "$(git remote get-url origin)" = https://github.com/CODEXSUN/codeship.git ]',
@@ -52,6 +56,6 @@ export function remoteUpdateCommand(tooling,name,action='update'){
   '[ "$(git rev-parse '+tooling.tag+'^{commit})" = '+tooling.commit+' ]',
   '[ -z "$(git ls-tree --name-only '+tooling.tag+' -- .codeship node_modules .env)" ]',
   'git checkout --quiet --detach '+tooling.tag,
-  'exec sh .container/hostinger/'+action+'.sh '+name+' --receive'].join('\n');
+  'exec sh .container/hostinger/'+action+'.sh '+name+(runtimeMode==='full-app'?' --backend':'')+' --receive'].join('\n');
  return "sh -c '"+script.replaceAll("'","'\"'\"'")+"'";
 }

@@ -4,9 +4,12 @@ import type {ApplicationInput} from '../contracts/application.ts';
 import {businessTargets} from '../.container/apps/business-targets.mjs';
 let input='';for await(const chunk of process.stdin)input+=chunk;
 const rows=JSON.parse(input) as ApplicationInput[];
-if(!Array.isArray(rows)||rows.length>12||rows.some(row=>!['devkit/codeship','devkit/codeitz','devkit/uiux','apps/platform',...Object.keys(businessTargets).map(name=>'apps/'+name)].includes(row.owner)||row.project!==(row.owner.startsWith('apps/')?'applications':'devkits')||row.environment!=='local-docker'))throw new Error('Invalid fixed managed application registry payload.');
+const args=process.argv.slice(2);
+if(args.length&&JSON.stringify(args)!==JSON.stringify(['--environment','vps']))throw new Error('Select the fixed Docker or VPS registry scope.');
+const environment=args.length?'vps':'local-docker';
+if(!Array.isArray(rows)||rows.length>12||rows.some(row=>!['devkit/codeship','devkit/codeitz','devkit/uiux','apps/platform',...Object.keys(businessTargets).map(name=>'apps/'+name)].includes(row.owner)||row.project!==(row.owner.startsWith('apps/')?'applications':'devkits')||row.environment!==environment||environment==='vps'&&(row.host!=='69.62.81.166'||process.platform!=='linux')))throw new Error('Invalid fixed managed application registry payload.');
 const {db}=openDatabase();try{
  const repo=applicationRepository(db);
- for(const row of rows){const existing=await db.selectFrom('applications').selectAll().where('owner','=',row.owner).where('environment','=','local-docker').execute();if(existing.length>1)throw new Error('Ambiguous Docker registry identity.');await repo.save({...row,...(existing[0]?{secretRevision:existing[0].secret_revision}:{})},existing[0]?.public_id);}
+ for(const row of rows){const existing=await db.selectFrom('applications').selectAll().where('owner','=',row.owner).where('environment','=',environment).execute();if(existing.length>1)throw new Error('Ambiguous Docker registry identity.');await repo.save({...row,...(existing[0]?{secretRevision:existing[0].secret_revision}:{})},existing[0]?.public_id);}
  console.log('Devkit registry updated; saved credentials remain encrypted.');
 }finally{await db.destroy();}

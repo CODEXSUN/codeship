@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)"
+if [ "${1:-}" = --target ] && [ "${2:-}" = staging ]; then
+  shift 2
+  exec node .container/staging/run.mjs setup codeitz "$@"
+fi
 if [ "${1:-}" = --target ] && [ "${2:-}" = hostinger ]; then
   shift 2
   exec sh .container/hostinger/setup.sh codeitz "$@"

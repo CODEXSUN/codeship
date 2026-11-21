@@ -1,0 +1,15 @@
+import cp from 'node:child_process';
+import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {stagingTarget} from './profile.mjs';
+const directory=fileURLToPath(new URL('./',import.meta.url));
+const connection=['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-i','D:/workspace/codebiz/deploy/.ssh/ubuntu_local_ed25519'];
+const host='cx@192.168.1.34';
+const run=(program,args,input)=>{const r=cp.spawnSync(program,args,{input,encoding:'utf8',windowsHide:true,stdio:['pipe','pipe','pipe']});if(r.status!==0)throw Error('Staging preparation stopped: '+r.stderr);return r.stdout.trim();};
+console.log(run('ssh',[...connection,host,'sh','-s'],fs.readFileSync(directory+'host-prep.sh','utf8').replaceAll('\r\n','\n')));
+const script="const f=require('fs');let s='';process.stdin.on('data',x=>s+=x);process.stdin.on('end',()=>{const t=JSON.parse(s),p='/srv/codebiz-staging/target.json';if(require('os').hostname()!=='cxserver'||process.getuid()!==1000)throw Error('Wrong staging host');if(f.existsSync(p)){const old=JSON.parse(f.readFileSync(p));for(const k of Object.keys(t))if(old[k]!==t[k])throw Error('Existing target differs');}else f.writeFileSync(p,JSON.stringify(t,null,2)+'\\n',{mode:0o600,flag:'wx'});f.mkdirSync('/srv/codebiz-staging/operators/bootstrap/.container/staging',{recursive:true,mode:0o700});});";
+const quote=s=>"'"+s.replaceAll("'","'\"'\"'")+"'";
+run('ssh',[...connection,host,'/opt/codebiz-staging-node-26.13.1/bin/node -e '+quote(script)],JSON.stringify(stagingTarget));
+const destination='/srv/codebiz-staging/operators/bootstrap/.container/staging/';
+for(const file of ['profile.mjs','infrastructure.mjs'])run('scp',[...connection,directory+file,host+':'+destination+file]);
+console.log(run('ssh',[...connection,host,'/opt/codebiz-staging-node-26.13.1/bin/node '+destination+'infrastructure.mjs']));

@@ -34,7 +34,8 @@ export async function verifyLocalRecovery(file,kind,{request={},manifest}={}){
 }
 export async function saveAndVerifyRecovery(request,manifest){
  validateRetirementRecoveryRequest(request,manifest);
- if(!['codeitz','codeship','platform'].includes(request.service)||!['postgresql','sqlite'].includes(request.kind)||!/^[a-f0-9-]{36}$/.test(request.exportId)||!/^[a-f0-9]{64}$/.test(request.sha256))throw Error('Invalid recovery request');
+ if(!['codeitz','codeship','platform','iilabs'].includes(request.service)||!['postgresql','sqlite'].includes(request.kind)||!/^[a-f0-9-]{36}$/.test(request.exportId)||!/^[a-f0-9]{64}$/.test(request.sha256))throw Error('Invalid recovery request');
+ if(request.service==='iilabs'&&(request.kind!=='postgresql'||!['master','app'].includes(request.scope)||request.database!==(request.scope==='master'?'platform_master':'app_iilabs')))throw Error('Invalid selected IILabs recovery scope');
  const directory=path.join(os.homedir(),'.codeship','recovery',request.exportId);fs.mkdirSync(directory,{recursive:true,mode:0o700});
  if(process.platform==='win32'){const user=(process.env.USERDOMAIN?process.env.USERDOMAIN+String.fromCharCode(92):'')+process.env.USERNAME;cp.execFileSync('icacls',[directory,'/inheritance:r','/grant:r',user+':(OI)(CI)F'],{stdio:'ignore',windowsHide:true});}
  const file=path.join(directory,request.service+(request.kind==='sqlite'?'.sqlite':'.dump'));

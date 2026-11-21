@@ -2,13 +2,30 @@
 
 ## Version State
 
-Current version: 1.0.38
+Current version: 1.0.39
 
-Release tag: v-1.0.38
+Release tag: v-1.0.39
 
-Changelog label: v 1.0.38
+Changelog label: v 1.0.39
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.39
+
+### [v 1.0.39] 2026-11-21 - Private staging pipeline and independent IILabs backend deployment
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.39.
+- Added a separately guarded private Ubuntu staging pipeline with synthetic identities, isolated PostgreSQL, pinned images, SSH tunnel origins, retained ownership and checked off-host master recovery.
+- Added explicit IILabs full-backend setup, independent tenant/runtime roles and original public-site recovery on a failed first replacement; default public-only mode remains explicit.
+- Transferred owner configuration only through private SSH input; preserved existing verified Platform domains and same-image multi-tenant availability.
+- Added VPS-scoped registry mirroring and exact-owner Docker metrics; no new deployment locks.
+- Verified staging original login, tab/CSRF/origin isolation, IILabs client save/reopen and existing owner access; UIUX17 interactive preview acceptance passed. CodeShip typecheck/build and195 tests passed; three additional ticket tests passed. Production promotion remains a separately recorded operation.
 
 ## v-1.0.38
 

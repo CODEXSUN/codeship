@@ -10,7 +10,7 @@ export function metricCategory(project:string,service:string,applications:{owner
  if(group?.project===project&&group.services.some(r=>r.key===service))return {category:'infra' as const,owner:'infrastructure/'+service};
  const infra=infrastructure.find(r=>r.project===project&&(r.kind==='file-manager'?'filemanager':r.kind)===service);
  if(infra)return {category:'infra' as const,owner:'infrastructure/'+infra.kind};
- const candidates=applications.filter(r=>r.project===project&&r.environment==='local-docker'&&/^(apps|devkit)\//.test(r.owner));
+ const candidates=applications.filter(r=>r.project===project&&['local-docker','vps'].includes(r.environment)&&/^(apps|devkit)\//.test(r.owner));
  const app=candidates.find(r=>r.owner.split('/')[1]===service)??(candidates.length===1?candidates[0]:undefined);
  return app?{category:app.owner.startsWith('apps/')?'apps' as const:'devkits' as const,owner:app.owner}:null;
 }

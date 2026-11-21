@@ -2,3 +2,9 @@ const products=Object.freeze({codeship:{owner:'devkit/codeship',state:'devkits/s
 const iilabsPublic={owner:'apps/iilabs',state:'apps/iilabs-public/state.json',lifecycle:'.container/hostinger/iilabs-public.mjs'};
 export function product(name){const entry=name==='iilabs'?iilabsPublic:Object.hasOwn(products,name)?products[name]:null;if(!entry)throw Error('Unsupported deployment product');return {...entry,repository:'CODEXSUN/'+name};}
 export function installedProduct(name,state){return ['platform','iilabs'].includes(name)?state:state?.services?.[name];}
+export function deploymentProduct(name,runtimeMode){
+ const descriptor=product(name);
+ if(runtimeMode===undefined)return descriptor;
+ if(name!=='iilabs'||runtimeMode!=='full-app')throw Error('Unsupported selected runtime mode.');
+ return {...descriptor,state:'apps/iilabs/state.json',lifecycle:'.container/hostinger/iilabs-lifecycle.mjs'};
+}

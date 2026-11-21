@@ -10,6 +10,7 @@ export const businessTargets=Object.freeze(Object.fromEntries([
  ['zetro','ZETRO',4405,14405,true,[]],
  ['texlinks','TEXLINKS',4415,14415,false,[]],
  ['abconnect','ABCONNECT',4425,14420,true,[]],
+ ['iilabs','IILABS',4435,14435,true,[]],
 ].map(([name,prefix,apiPort,port,database,dependencies])=>[name,Object.freeze({name,prefix,apiPort,port,relayPort:apiPort+10000,publishedContainerPort:name==='abconnect'?4420:apiPort,database:database?'app_'+name.replaceAll('-','_'):null,dependencies:Object.freeze(dependencies)})])));
 export function businessTarget(name){const target=Object.hasOwn(businessTargets,name)?businessTargets[name]:null;if(!target)throw Error('Unsupported managed application.');return target;}
 export function businessServiceProfile(target,service,{token,version,image}){

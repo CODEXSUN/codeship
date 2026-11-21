@@ -31,3 +31,10 @@ test('metric reports filter categories, flag stale snapshots, and fail closed on
   assert.equal((await dockerMetricReport('infra',path.join(dir,'missing'),now)).available,false);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('VPS Docker metrics retain exact project/service ownership',()=>{
+ const rows=[{owner:'apps/iilabs',project:'applications',environment:'vps'},{owner:'apps/platform',project:'applications',environment:'vps'}];
+ assert.equal(metricCategory('applications','iilabs',rows,[])?.owner,'apps/iilabs');
+ assert.equal(metricCategory('applications','platform',rows,[])?.owner,'apps/platform');
+ assert.equal(metricCategory('applications','foreign',rows,[]),null);
+});

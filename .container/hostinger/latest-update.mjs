@@ -1,4 +1,7 @@
-import {product,installedProduct} from '../product.mjs';
+import {product,deploymentProduct,installedProduct} from '../product.mjs';
+import {parseEnv} from 'node:util';
+import {validateIilabsOwner} from './iilabs-tenant.mjs';
+import {serializeDeploymentEnvironment} from '../../src/api/modules/master/application/accounts.ts';
 import fs from 'node:fs';
 import cp from 'node:child_process';
 import path from 'node:path';
@@ -26,7 +29,7 @@ export async function receiveUpdate(name,ticket,approve){
  const target=JSON.parse(fs.readFileSync(stateRoot+'/target.json','utf8'));
  if(target.id!=='hostinger-914719'||target.host!=='69.62.81.166'||target.operator!=='/home/codebiz/.deployment/operators/v-1.0.21/devkit/codeship'||target.publicExposure!==false||target.binding!=='127.0.0.1'||target.dataPolicy!=='fresh'||target.infraNetwork!=='cxapp-network')throw Error('Registered private deployment target differs');
  for(const file of ['data/codeship.sqlite','keys/vault.key'])if(!fs.existsSync(stateRoot+'/'+file))throw Error('Existing private operator state missing; update cannot initialize it');
- const descriptor=product(name),action=ticket.action??'update';
+ const descriptor=deploymentProduct(name,ticket.runtimeMode),action=ticket.action??'update';
  const stateFile=stateRoot+'/'+descriptor.state;
  const state=fs.existsSync(stateFile)?JSON.parse(fs.readFileSync(stateFile,'utf8')):undefined;
  const installed=installedProduct(name,state);
@@ -48,6 +51,13 @@ export async function receiveUpdate(name,ticket,approve){
   const child=cp.fork(descriptor.lifecycle,['verify',name],{cwd:root,env,stdio:['ignore','inherit','inherit','ipc']});const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});if(code!==0)throw Error('Current release readiness failed');console.log(name+': already latest; readiness verified; no replacement/migration');return;
  }
  const approved=stateRoot+'/devkits/approved';fs.mkdirSync(approved,{recursive:true,mode:0o700});
+ if(name==='iilabs'&&ticket.runtimeMode==='full-app'&&action==='setup'){
+  const file=stateRoot+'/apps/iilabs/private/owner.env';fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});
+  const content=serializeDeploymentEnvironment(Object.fromEntries(Object.entries(ticket.iilabsOwner).map(([key,value])=>['IILABS_OWNER_'+key,value])));
+  if(fs.existsSync(file)){if(fs.readFileSync(file,'utf8')!==content)throw Error('Existing private owner input differs; preserve and review');}
+  else fs.writeFileSync(file,content,{mode:0o600,flag:'wx'});
+  env.CODESHIP_IILABS_OWNER_FILE=file;
+ }
  const releaseSetFile=path.join(approved,name+'-'+randomUUID()+'.json');
  fs.writeFileSync(releaseSetFile,JSON.stringify({schema:1,source:'github',approvedAt:ticket.approvedAt,services:{[name]:ticket.manifest}}),{mode:0o600,flag:'wx'});
  if(ticket.priorRecovery){
@@ -64,7 +74,7 @@ export async function receiveUpdate(name,ticket,approve){
  console.log(name+': updated to '+ticket.manifest.version+' using published tooling '+ticket.tooling.version);
 }
 async function sendUpdate(name,ticket){
- const child=cp.spawn('ssh',['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','codexsun-hostinger',remoteUpdateCommand(ticket.tooling,name,ticket.action??'update')],{stdio:['pipe','pipe','ignore'],windowsHide:true});
+ const child=cp.spawn('ssh',['-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','codexsun-hostinger',remoteUpdateCommand(ticket.tooling,name,ticket.action??'update',ticket.runtimeMode)],{stdio:['pipe','pipe','ignore'],windowsHide:true});
  child.stdin.on('error',()=>{});
  child.stdin.write(JSON.stringify(ticket)+'\n');
  const lines=readline.createInterface({input:child.stdout,crlfDelay:Infinity});
@@ -82,12 +92,12 @@ async function sendUpdate(name,ticket){
 }
 async function main(){
  const [name,...args]=process.argv.slice(2);product(name);
- const {action,releaseTag,resumeId,priorRecoveryFile,preserveIdentityFile,mode,id}=parseSelectedUpdateArguments(name,args);
+ const {action,releaseTag,resumeId,priorRecoveryFile,preserveIdentityFile,mode,id,runtimeMode}=parseSelectedUpdateArguments(name,args);
  if(mode==='--export-recovery'){await exportRecovery(root,name,id);return;}
  if(mode==='--receive'){
   const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});const iterator=lines[Symbol.asyncIterator]();
   try{const first=await iterator.next();if(first.done||first.value.length>256000)throw Error('Approved update ticket missing');
-   const ticket=JSON.parse(first.value);if((ticket.action??'update')!==action)throw Error('Approved deployment action differs');
+   const ticket=JSON.parse(first.value);if((ticket.action??'update')!==action||ticket.runtimeMode!==runtimeMode)throw Error('Approved deployment action or runtime mode differs');
    await receiveUpdate(name,ticket,async request=>{
     console.log('CODESHIP_RECOVERY:'+JSON.stringify(request));
     let timer;try{const next=await Promise.race([iterator.next(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Local restore approval timed out')),30*60*1000);})]);if(next.done||next.value.length>8192)throw Error('Local restore approval missing');const proof=JSON.parse(next.value);if(proof.id!==request.id)throw Error('Recovery approval scope differs');return proof;}finally{clearTimeout(timer);}
@@ -99,7 +109,13 @@ async function main(){
  let preserveIdentity;
  if(preserveIdentityFile){const stat=fs.lstatSync(preserveIdentityFile);if(!stat.isFile()||stat.isSymbolicLink()||stat.size>8192)throw Error('Use the bounded historical metadata file');const historicalMetadata=JSON.parse(fs.readFileSync(preserveIdentityFile,'utf8'));preserveIdentity=validateIdentityPreservation({historicalMetadata,historicalMetadataSha256:createHash('sha256').update(JSON.stringify(historicalMetadata)).digest('hex')});}
  const selected=await latestRelease(name,{releaseTag});const tooling=name==='codeship'?selected:await latestRelease('codeship');
- const ticket={schema:1,source:'github',selected:name,action,...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),...(preserveIdentity?{preserveIdentity}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
+ let iilabsOwner;
+ if(name==='iilabs'&&runtimeMode==='full-app'&&action==='setup'){
+  const file=path.join(root,'.codeship/private/iilabs-owner.env'),stat=fs.lstatSync(file);
+  if(!stat.isFile()||stat.isSymbolicLink()||stat.size>8192)throw Error('Use the protected bounded IILabs owner file');
+  const values=parseEnv(fs.readFileSync(file,'utf8'));iilabsOwner=Object.fromEntries(['USERNAME','EMAIL','NAME','PASSWORD'].map(key=>[key,values['IILABS_OWNER_'+key]]));validateIilabsOwner(iilabsOwner);
+ }
+ const ticket={schema:1,source:'github',selected:name,action,...(runtimeMode?{runtimeMode}:{}),...(iilabsOwner?{iilabsOwner}:{}),...(resumeId?{resumeId}:{}),...(priorRecovery?{priorRecovery}:{}),...(preserveIdentity?{preserveIdentity}:{}),approvedAt:new Date().toISOString(),tooling:{version:tooling.manifest.version,tag:tooling.manifest.tag,commit:tooling.manifest.commit},manifest:selected.manifest,archiveUrl:selected.archiveUrl};
  validateUpdateTicket(ticket,name);cleanSource(ticket.tooling);
  console.log(name+': approved successful stable GitHub release '+selected.manifest.tag);
  if(mode==='--check')return;

@@ -3,7 +3,7 @@ import {applicationAddresses,applyIndependentNetwork,ensureApplicationNetwork,ve
 import {bridgePlan,createConnectionBridge} from '../.container/apps/runtime-network.mjs';
 import {businessTargets} from '../.container/apps/business-targets.mjs';
 test('every app owns its network address and published port without sharing Platform namespaces',()=>{
- const addresses=applicationAddresses('172.30.0.0/16'),topology={name:'applications_backend',subnet:'172.30.0.0/16',gateway:'172.30.0.1',addresses,peers:''};assert.equal(new Set(Object.values(addresses)).size,10);
+ const addresses=applicationAddresses('172.30.0.0/16'),topology={name:'applications_backend',subnet:'172.30.0.0/16',gateway:'172.30.0.1',addresses,peers:''};assert.equal(new Set(Object.values(addresses)).size,11);
  for(const name of ['platform',...Object.keys(businessTargets)]){
   const service:any=applyIndependentNetwork({network_mode:'service:platform',depends_on:{platform:{restart:true}}},name,topology);
   assert.equal(service.network_mode,undefined);assert.equal(service.depends_on,undefined);assert.equal(service.networks.backend.ipv4_address,addresses[name]);assert.equal(service.ports.length,1);assert.match(service.ports[0],/^127\.0\.0\.1:/);
