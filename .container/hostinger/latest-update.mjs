@@ -14,6 +14,7 @@ import {assertCleanCheckout} from './clean-checkout.mjs';
 import readline from 'node:readline';
 import {runLifecycleWithRecovery,exportRecovery} from './recovery-channel.mjs';
 import {saveAndVerifyRecovery} from './local-recovery.mjs';
+import {ensureReleasedHostMetrics} from './metrics-service.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../../',import.meta.url)));
 const cleanSource=tooling=>assertCleanCheckout(root,tooling);
 function linkExisting(destination,source){
@@ -47,6 +48,7 @@ export async function receiveUpdate(name,ticket,approve){
  linkExisting(root+'/node_modules',target.operator+'/node_modules');
  cleanSource(ticket.tooling);
  const env={...process.env,CODESHIP_SQLITE_FILE:stateRoot+'/data/codeship.sqlite',CODESHIP_VAULT_KEY_FILE:stateRoot+'/keys/vault.key',CODESHIP_DEVKIT_SCRIPT_ENTRY:'1',CODESHIP_APP_SCRIPT_ENTRY:'1',CODESHIP_RELEASED_UPDATE_ENTRY:'1',CODESHIP_EXECUTION_MODE:'inventory',CODESHIP_RELEASE_ASSETS_JSON:JSON.stringify({[ticket.manifest.repository+'@'+ticket.manifest.tag]:ticket.archiveUrl}),CODESHIP_KEEP_RELEASE_ARCHIVES:'0'};
+ await ensureReleasedHostMetrics(root,ticket.tooling);
  if(current){
   const child=cp.fork(descriptor.lifecycle,['verify',name],{cwd:root,env,stdio:['ignore','inherit','inherit','ipc']});const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});if(code!==0)throw Error('Current release readiness failed');console.log(name+': already latest; readiness verified; no replacement/migration');return;
  }

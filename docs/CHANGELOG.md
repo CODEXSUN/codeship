@@ -2,13 +2,28 @@
 
 ## Version State
 
-Current version: 1.0.40
+Current version: 1.0.41
 
-Release tag: v-1.0.40
+Release tag: v-1.0.41
 
-Changelog label: v 1.0.40
+Changelog label: v 1.0.41
 
 The release-tag field is a naming convention; publishing does not create a Git tag.
+
+## v-1.0.41
+
+### [v 1.0.41] 2026-11-21 - Upgrade released host metrics and private snapshot publication
+
+#### Database Changes
+
+- Database update: No (manual).
+
+#### App Codebase Changes
+
+- Bumped @workspace/codeship version to 1.0.41.
+- Move only the verified existing Hostinger metrics service from the retained21 operator to the clean approved release; preserve its reader/restart policy, private recovery copy and rollback on admission failure.
+- Publish redacted metric/log snapshots as root-owned0640 with group1000 only when explicitly configured on a Linux root collector; application containers retain read-only access and no Docker socket or operator key.
+- Verified exact old-unit transformation, rejection of other owners/targets, atomic publication, and actual root publisher/non-root read-only access in disposable local Docker. Typecheck and focused tests pass.
 
 ## v-1.0.40
 

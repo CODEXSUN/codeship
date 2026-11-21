@@ -10,6 +10,7 @@ import {databaseFile,appRoot} from '../src/api/database.ts';
 import type {DockerMetricSnapshot,DockerMetric} from '../contracts/docker-metrics.ts';
 import {containerStorage} from './container-storage.ts';
 import {parseDiskUsage} from './disk-usage.ts';
+import {publishMetricSnapshot} from './metrics-publication.ts';
 const watch=process.argv.includes('--watch');if(process.argv.slice(2).some(a=>!['--watch','--once'].includes(a)))throw new Error('Use --once or --watch.');
 const directory=path.join(appRoot,'.codeship/metrics'),file=path.join(directory,'snapshot.json');await mkdir(directory,{recursive:true,mode:0o700});
 let lock:Awaited<ReturnType<typeof open>>|undefined;const lockFile=path.join(directory,'collector.lock');
@@ -44,7 +45,7 @@ async function collect(){
   for(const id of storageCache.keys())if(!selected.some(row=>row.ID===id))storageCache.delete(id);
   snapshot={collectedAt:new Date().toISOString(),available:true,engine,containers};
  }catch{snapshot={collectedAt:new Date().toISOString(),available:false,containers:[]};}
- await writeFile(file+'.next',JSON.stringify(snapshot),{mode:0o600});await rename(file+'.next',file);
+ await publishMetricSnapshot(file,JSON.stringify(snapshot));
  console.log(JSON.stringify({at:snapshot.collectedAt,available:snapshot.available,containers:snapshot.containers.length}));
 }
 let stopped=false;process.on('SIGINT',()=>{stopped=true;});process.on('SIGTERM',()=>{stopped=true;});

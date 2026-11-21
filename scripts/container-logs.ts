@@ -6,6 +6,7 @@ import {databaseFile} from '../src/api/database.ts';
 import {decryptSecrets} from '../src/api/modules/master/application/vault.ts';
 import {docker,dockerLogTail,redact} from '../src/api/modules/business/deployment/adapter.ts';
 import type {MetricCategory} from '../contracts/docker-metrics.ts';
+import {publishMetricSnapshot} from './metrics-publication.ts';
 export function secretValues(values:Record<string,string|undefined>):string[]{
  const result:string[]=[];for(const [key,value]of Object.entries(values)){if(!value)continue;if(/(?:password|token|secret|sshKey|private_key|api_key|_key|database_url|redis_url|dsn)$/i.test(key)&&!/(?:^|_)(?:REQUIRE|ENABLE|DISABLE|USE)_/i.test(key))result.push(value,...value.split(/\r?\n/).filter(line=>line.length>=8));try{const url=new URL(value);if(url.password)result.push(url.password,decodeURIComponent(url.password));}catch{}}return result;
 }
@@ -23,5 +24,5 @@ export async function collectContainerLogs(selected:{ID:string;category:MetricCa
  try{const db=new DatabaseSync(databaseFile(),{readOnly:true});let secrets:string[]=[];try{for(const table of ['applications','infrastructure_services'])for(const row of db.prepare('SELECT public_id,encrypted_secrets FROM '+table+' WHERE encrypted_secrets IS NOT NULL').all() as any[]){const saved=decryptSecrets(row.public_id,row.encrypted_secrets);secrets.push(...secretValues(saved));if(saved.env)secrets.push(...secretValues(parseEnv(saved.env)));}}finally{db.close();}
  const pending=selected.slice(0,100).filter(row=>/^[a-f0-9]{12,64}$/.test(row.ID));for(const id of environmentSecrets.keys())if(!pending.some(row=>row.ID===id))environmentSecrets.delete(id);let next=0;const result:any[]=[];await Promise.all(Array.from({length:Math.min(4,pending.length)},async()=>{while(next<pending.length){const row=pending[next++];try{let values=environmentSecrets.get(row.ID);if(!values){const env=JSON.parse(await docker(['inspect','--format','{{json .Config.Env}}',row.ID]));values=secretValues(Object.fromEntries((env??[]).map((entry:string)=>{const i=entry.indexOf('=');return [entry.slice(0,i),entry.slice(i+1)];})));environmentSecrets.set(row.ID,values);}const text=sanitizeLog(await dockerLogTail(row.ID),[...secrets,...values]);result.push({id:row.ID,category:row.category,available:true,text});}catch{result.push({id:row.ID,category:row.category,available:false,text:''});}}}));containers=result;
  }catch{}
- const file=path.join(directory,'logs.json');await writeFile(file+'.next',JSON.stringify({collectedAt,containers}),{mode:0o600});await rename(file+'.next',file);
+ const file=path.join(directory,'logs.json');await publishMetricSnapshot(file,JSON.stringify({collectedAt,containers}));
 }
